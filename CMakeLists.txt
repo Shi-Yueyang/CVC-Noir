@@ -61,22 +61,19 @@ endif()
 
 # ── Preprocessor defines ─────────────────────────────────────
 target_compile_definitions(Win300C PRIVATE
-    # Common defines (all configs)
-    LOG_CONSOLE_IS_PRINTF_
     API_PRINTF_IS_PRINTF
-    INTERNAL_TAU
 
-    # Debug defines (mirrors the VS Debug configuration)
-    $<$<CONFIG:Debug>:
-        _DEBUG
-        _CONSOLE
+    # Windows-specific
+    $<$<PLATFORM_ID:Windows>:
         _CRT_SECURE_NO_WARNINGS
-        GET_MOTION_DATA_DIRECTLY_FROM_PXI
-        AUTO_ERROR_LIGHT
-        DMI_PATH="..\\..\\DMI\\TACN-ATP-DMI.exe"
     >
 
-    # Release defines
+    # Debug
+    $<$<CONFIG:Debug>:
+        _DEBUG
+    >
+
+    # Release
     $<$<CONFIG:Release>:
         NDEBUG
     >
@@ -150,14 +147,6 @@ else()
         target_link_libraries(Win300C PRIVATE rt)
     endif()
 endif()
-
-# ── Post-build: copy config to output directory ──────────────
-add_custom_command(TARGET Win300C POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy
-        "${CMAKE_SOURCE_DIR}/simu_config.json"
-        "$<TARGET_FILE_DIR:Win300C>/simu_config.json"
-    COMMENT "Copying simu_config.json to build output"
-)
 
 # ── Tests ────────────────────────────────────────────────────
 option(BUILD_TESTS "Build test executables" ON)
