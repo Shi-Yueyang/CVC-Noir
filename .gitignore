@@ -1,0 +1,66 @@
+# Visual Studio workspace state
+.vs/
+*.VC.db
+*.VC.VC.opendb
+*.opendb
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+# Visual Studio generated files
+*.aps
+*.idb
+*.ilk
+*.ipch
+*.pdb
+*.obj
+*.pch
+*.tlog
+*.lastbuildstate
+*.recipe
+*.FileListAbsolute.txt
+*.tmp
+
+# Build output directories
+/Debug/*
+/Debug/**/*
+!/Debug/.gitkeep
+/Release/
+/x64/
+/x86/
+/Win300C/Debug/
+/Win300C/Release/
+/build
+/refs
+/logs
+# Binaries produced by local builds
+/Win300C/*.exe
+/Win300C/*.dll
+/Win300C/*.lib
+/Win300C/*.exp
+
+# Logs and runtime output
+/Log/
+/Win300C/Log_folder/
+*.log
+
+# MSBuild and compiler logs
+*.binlog
+*.wrn
+*.err
+.kilo
+
+# Python (skills tooling)
+skills/.venv/
+skills/venv/
+**/__pycache__/
+*.pyc
+
+# Domain logic (managed externally)
+**/ATP_CODE/
+**/ATO_CODE/
+**/application/
+
+# Runtime config (user-specific)
+simu_config.json
+kilo.json

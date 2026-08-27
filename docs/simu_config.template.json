@@ -1,0 +1,244 @@
+{
+    "cycle_ms": 200,
+    "launcher": [
+        {
+            "enabled": true,
+            "target": "path/to/your/app.exe",
+            "args": "",
+            "working_dir": "",
+            "delay_ms": 0,
+            "if_running": "skip",
+            "auto_close": true,
+            "console": "new"
+        }
+    ],
+    "log": {
+        "default_console": {
+            "enabled": true,
+            "level": "info",
+            "flush_level": "warn",
+            "use_color": true,
+            "pattern": "[%H:%M:%S.%e] [%^%l%$] [%n] %v"
+        },
+        "default_file": {
+            "enabled": false,
+            "level": "debug",
+            "flush_level": "error",
+            "directory": "logs",
+            "file_name": "simulator.log",
+            "pattern": "[%Y-%m-%d %H:%M:%S.%e] [%l] [%n] %v",
+            "rotation": {
+                "max_file_size_mb": 10,
+                "max_files": 5
+            }
+        },
+        "modules": {
+            "simulation": {
+                "console": true
+            }
+        }
+    },
+    "board_status": [
+        {
+            "type": "MPB",
+            "boards": [
+                { "id": 3, "friend_id": 12, "status": "good" },
+                { "id": 12, "friend_id": 3, "status": "good" }
+            ]
+        },
+        {
+            "type": "GWB",
+            "boards": [
+                { "id": 5, "status": "good" }
+            ]
+        },
+        {
+            "type": "VVB",
+            "boards": [
+                { "id": 19, "friend_id": 28, "status": "good" },
+                { "id": 28, "friend_id": 19, "status": "good" }
+            ]
+        },
+        {
+            "type": "VIB",
+            "boards": [
+                { "id": 20, "friend_id": 27, "status": "good" },
+                { "id": 27, "friend_id": 20, "status": "good" }
+            ]
+        },
+        {
+            "type": "VOB",
+            "boards": [
+                { "id": 21, "friend_id": 26, "status": "good" },
+                { "id": 26, "friend_id": 21, "status": "good" }
+            ]
+        },
+        {
+            "type": "BTM",
+            "boards": [
+                { "id": 15, "friend_id": 16, "status": "good" },
+                { "id": 16, "friend_id": 15, "status": "good" }
+            ]
+        }
+    ],
+    "sessions": {
+        "raw_sessions": [
+            {
+                "name": "tcr_a",
+                "id": "0x304",
+                "connection": {
+                    "type": "udp",
+                    "local_ip": "127.0.0.1",
+                    "local_port": 19011,
+                    "default_peer_ip": "127.0.0.1",
+                    "default_peer_port": 19010
+                }
+            },
+            {
+                "name": "tcr_b",
+                "id": "0x305"
+            },
+            {
+                "name": "cir_1",
+                "id": "0x306"
+            },
+            {
+                "name": "cir_2",
+                "id": "0x307"
+            }
+        ],
+        "maint_sessions": [
+            {
+                "name": "jru",
+                "id": "0x300"
+            }
+        ],
+        "rssp1_sessions": [
+            {
+                "name": "dmi",
+                "id": "0x201",
+                "connection": {
+                    "type": "tcp_server",
+                    "receive_framing": "dmi",
+                    "send_framing": "none",
+                    "local_ip": "127.0.0.1",
+                    "local_port": 8080
+                }
+            },
+            {
+                "name": "ato",
+                "id": "0x210"
+            },
+            {
+                "name": "cbtc_1",
+                "id": "0x205"
+            }
+        ],
+        "safety037_sessions": [
+            {
+                "name": "tsrs_1",
+                "id": 3,
+                "recv_no_data_send_lost_ms": -1,
+                "connect_success_delay_ms": 1000,
+                "disconnect_failure_delay_ms": 1000,
+                "dynamic_peer": true
+            }
+        ],
+        "snmp_sessions": [
+            {
+                "name": "tau_1",
+                "id": "0x401"
+            },
+            {
+                "name": "tau_2",
+                "id": "0x402"
+            }
+        ],
+        "other_asw_sessions": [
+            {
+                "name": "atp_sdlu_in_atp",
+                "id": "0x803",
+                "is_skip": true
+            },
+            {
+                "name": "atp_sdlu_in_ato",
+                "id": "0x805",
+                "is_skip": true
+            },
+            {
+                "name": "atp_ato",
+                "id": "0x80B",
+                "is_skip": true
+            }
+        ],
+        "pxi_session": {
+            "local_ip": "192.168.0.28",
+            "local_port": 6001,
+            "peer_ip": "192.168.0.24",
+            "peer_port": 45002,
+            "trace_unnamed_ports": false,
+            "port_names": {
+                "input": {},
+                "output": {}
+            },
+            "io_mapping": {
+                "to_pxi": [
+                    {
+                        "length": 17,
+                        "total_length": 35,
+                        "high_value": "0x11",
+                        "entries": [
+                            { "from": 0, "to": 2 },
+                            { "from": 1, "to": 3 }
+                        ]
+                    }
+                ],
+                "from_pxi": [
+                    {
+                        "total_length": 34,
+                        "high_value": "0x11",
+                        "entries": [
+                            { "from": 6, "to": 2 },
+                            { "from": 7, "to": 3 }
+                        ]
+                    }
+                ],
+                "from_internal": {
+                    "entries": [
+                        { "from": 0, "or": 17, "to": 0 },
+                        { "from": 1, "or": 18, "to": 1 }
+                    ]
+                }
+            }
+        },
+        "pxi_motion_session": {
+            "local_ip": "192.168.0.246",
+            "local_port": 8810,
+            "peer_ip": "192.168.0.246",
+            "peer_port": 8812
+        }
+    },
+    "data": {
+        "application_data": {
+            "files": [
+                "Plug/application_data/ASW1.bin",
+                "Plug/application_data/Config2.line1",
+                "Plug/application_data/Config1.train"
+            ],
+            "version_pad": [0, 1, 2, 3, 0, 3, 2, 1]
+        },
+        "nrnw": {
+            "file": "Plug/nvram.bin"
+        },
+        "araw": {
+            "file": "Plug/dataplug.bin"
+        },
+        "arnw": {
+            "file": "Plug/arnw.bin"
+        },
+        "flash": [
+            { "id": 0, "file": "Plug/db.dat" },
+            { "id": 1, "file": "Plug/db2.dat" }
+        ]
+    }
+}

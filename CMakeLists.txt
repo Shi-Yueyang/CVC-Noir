@@ -1,0 +1,182 @@
+cmake_minimum_required(VERSION 3.16)
+project(Win300C LANGUAGES C CXX)
+
+# C++17 standard
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
+# C standard
+set(CMAKE_C_STANDARD 11)
+set(CMAKE_C_STANDARD_REQUIRED ON)
+set(CMAKE_C_EXTENSIONS OFF)
+
+# ── Source files ──────────────────────────────────────────────
+# 300C_SIMU (C++ simulator runtime + C adaptation layer)
+file(GLOB_RECURSE SIMU_SOURCES
+    "Source/300C_SIMU/*.c"
+    "Source/300C_SIMU/*.cpp"
+)
+
+# Domain logic (pure C) — configurable path
+# Override with: cmake -DDOMAIN_CODE_DIR=Source/YourFolder
+# Auto-detects common folder names if not set
+set(DOMAIN_CODE_DIR "" CACHE STRING "Path to domain logic folder (relative to source dir)")
+if(NOT DOMAIN_CODE_DIR)
+    foreach(_candidate ATP_CODE ATO_CODE application)
+        if(IS_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/Source/${_candidate}")
+            set(DOMAIN_CODE_DIR "Source/${_candidate}" CACHE STRING "" FORCE)
+            message(STATUS "Auto-detected domain logic at: ${DOMAIN_CODE_DIR}")
+            break()
+        endif()
+    endforeach()
+endif()
+
+set(DOMAIN_SOURCES "")
+if(DOMAIN_CODE_DIR AND IS_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/${DOMAIN_CODE_DIR}")
+    file(GLOB_RECURSE DOMAIN_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/${DOMAIN_CODE_DIR}/*.c")
+    list(LENGTH DOMAIN_SOURCES _domain_count)
+    message(STATUS "Domain logic sources: ${DOMAIN_CODE_DIR} (${_domain_count} files)")
+elseif(DOMAIN_CODE_DIR)
+    message(WARNING "Domain logic path set but not found: ${DOMAIN_CODE_DIR}")
+else()
+    message(STATUS "No domain logic folder found — building simulator only")
+endif()
+
+set(ALL_SOURCES ${SIMU_SOURCES} ${DOMAIN_SOURCES})
+
+# ── Executable ────────────────────────────────────────────────
+# Exclude test files from the main executable
+list(FILTER ALL_SOURCES EXCLUDE REGEX ".*test_.*\\.cpp$")
+add_executable(Win300C ${ALL_SOURCES})
+
+# ── Include directories ──────────────────────────────────────
+target_include_directories(Win300C PRIVATE
+    "Source/300C_SIMU"
+    "Source/300C_SIMU/EXTERNAL"
+)
+if(DOMAIN_CODE_DIR AND IS_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/${DOMAIN_CODE_DIR}")
+    target_include_directories(Win300C PRIVATE "${DOMAIN_CODE_DIR}")
+endif()
+
+# ── Preprocessor defines ─────────────────────────────────────
+target_compile_definitions(Win300C PRIVATE
+    # Common defines (all configs)
+    LOG_CONSOLE_IS_PRINTF_
+    API_PRINTF_IS_PRINTF
+    INTERNAL_TAU
+
+    # Debug defines (mirrors the VS Debug configuration)
+    $<$<CONFIG:Debug>:
+        _DEBUG
+        _CONSOLE
+        _CRT_SECURE_NO_WARNINGS
+        GET_MOTION_DATA_DIRECTLY_FROM_PXI
+        AUTO_ERROR_LIGHT
+        DMI_PATH="..\\..\\DMI\\TACN-ATP-DMI.exe"
+    >
+
+    # Release defines
+    $<$<CONFIG:Release>:
+        NDEBUG
+    >
+)
+
+# On Windows, also define WIN32
+if(WIN32)
+    target_compile_definitions(Win300C PRIVATE WIN32)
+endif()
+
+# On Linux, define _LINUX for code that needs a Linux branch
+if(UNIX AND NOT APPLE)
+    target_compile_definitions(Win300C PRIVATE __linux__ _LINUX)
+endif()
+
+# ── Compiler options ──────────────────────────────────────────
+if(MSVC)
+    # Match the VS project settings
+    target_compile_options(Win300C PRIVATE
+        /utf-8
+        /MP   # multi-processor compilation
+        /wd4828  # disable "illegal character" warning for GBK comments
+    )
+    # Disable specific MSVC warnings (mirrors #pragma in code)
+    target_compile_options(Win300C PRIVATE
+        /wd4057 /wd4100 /wd4127 /wd4189 /wd4244 /wd4293 /wd4389
+    )
+    # Release optimizations
+    target_compile_options(Win300C PRIVATE
+        $<$<CONFIG:Release>:/O2>
+    )
+else()
+    # GCC / Clang
+    target_compile_options(Win300C PRIVATE
+        -Wall -Wextra
+    )
+    # Suppress warnings the ATP_CODE generates (lots of sign-compare, unused-parameter etc.)
+    target_compile_options(Win300C PRIVATE
+        -Wno-sign-compare
+        -Wno-unused-parameter
+        -Wno-unused-variable
+        -Wno-unused-but-set-variable
+        -Wno-missing-field-initializers
+        -Wno-format
+        -Wno-format-security
+        -Wno-unknown-pragmas
+        -Wno-pointer-compare
+        -Wno-type-limits
+        -Wno-implicit-function-declaration
+        -Wno-comment
+        -Wno-char-subscripts
+    )
+    # Debug / Release
+    target_compile_options(Win300C PRIVATE
+        $<$<CONFIG:Debug>:-g -O0>
+        $<$<CONFIG:Release>:-O2 -DNDEBUG>
+    )
+endif()
+
+# ── Link libraries ────────────────────────────────────────────
+if(WIN32)
+    target_link_libraries(Win300C PRIVATE ws2_32)
+else()
+    # POSIX: need pthread for spdlog async logger; librt for clock_gettime (glibc < 2.17)
+    target_link_libraries(Win300C PRIVATE pthread)
+
+    # Check if clock_gettime needs -lrt (older glibc)
+    include(CheckLibraryExists)
+    check_library_exists(rt clock_gettime "" HAVE_CLOCK_GETTIME_IN_RT)
+    if(HAVE_CLOCK_GETTIME_IN_RT)
+        target_link_libraries(Win300C PRIVATE rt)
+    endif()
+endif()
+
+# ── Post-build: copy runtime files to output directory ───────
+add_custom_command(TARGET Win300C POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+        "${CMAKE_SOURCE_DIR}/Plug"
+        "$<TARGET_FILE_DIR:Win300C>/Plug"
+    COMMAND ${CMAKE_COMMAND} -E copy
+        "${CMAKE_SOURCE_DIR}/simu_config.json"
+        "$<TARGET_FILE_DIR:Win300C>/simu_config.json"
+    COMMENT "Copying runtime files (Plug/, simu_config.json) to build output"
+)
+
+# ── Tests ────────────────────────────────────────────────────
+option(BUILD_TESTS "Build test executables" ON)
+if(BUILD_TESTS)
+	enable_testing()
+	file(GLOB_RECURSE TEST_SOURCES "Source/300C_SIMU/*test_*.cpp")
+	add_executable(test_tcp_framing ${TEST_SOURCES})
+	target_include_directories(test_tcp_framing PRIVATE
+		"Source/300C_SIMU/BSW_CODE/Pub_Comm")
+	target_compile_options(test_tcp_framing PRIVATE
+		-Wall -Wextra
+		-Wno-sign-compare -Wno-unused-parameter -Wno-unused-variable
+	)
+	add_test(NAME test_tcp_framing COMMAND test_tcp_framing)
+endif()
+
+# ── IDE source grouping (optional, matches VS filters) ───────
+# Group sources by their directory to make IDE navigation easier
+source_group(TREE "${CMAKE_SOURCE_DIR}" FILES ${ALL_SOURCES})
