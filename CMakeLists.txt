@@ -151,15 +151,12 @@ else()
     endif()
 endif()
 
-# ── Post-build: copy runtime files to output directory ───────
+# ── Post-build: copy config to output directory ──────────────
 add_custom_command(TARGET Win300C POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_directory
-        "${CMAKE_SOURCE_DIR}/Plug"
-        "$<TARGET_FILE_DIR:Win300C>/Plug"
     COMMAND ${CMAKE_COMMAND} -E copy
         "${CMAKE_SOURCE_DIR}/simu_config.json"
         "$<TARGET_FILE_DIR:Win300C>/simu_config.json"
-    COMMENT "Copying runtime files (Plug/, simu_config.json) to build output"
+    COMMENT "Copying simu_config.json to build output"
 )
 
 # ── Tests ────────────────────────────────────────────────────

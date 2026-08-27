@@ -221,24 +221,24 @@
     "data": {
         "application_data": {
             "files": [
-                "Plug/application_data/ASW1.bin",
-                "Plug/application_data/Config2.line1",
-                "Plug/application_data/Config1.train"
+                "data/application_data/ASW1.bin",
+                "data/application_data/Config2.line1",
+                "data/application_data/Config1.train"
             ],
             "version_pad": [0, 1, 2, 3, 0, 3, 2, 1]
         },
         "nrnw": {
-            "file": "Plug/nvram.bin"
+            "file": "data/nvram.bin"
         },
         "araw": {
-            "file": "Plug/dataplug.bin"
+            "file": "data/dataplug.bin"
         },
         "arnw": {
-            "file": "Plug/arnw.bin"
+            "file": "data/arnw.bin"
         },
         "flash": [
-            { "id": 0, "file": "Plug/db.dat" },
-            { "id": 1, "file": "Plug/db2.dat" }
+            { "id": 0, "file": "data/db.dat" },
+            { "id": 1, "file": "data/db2.dat" }
         ]
     }
 }

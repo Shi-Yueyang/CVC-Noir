@@ -65,6 +65,8 @@ Copy the template config and customize for your environment:
 cp docs/simu_config.template.json simu_config.json
 ```
 
+Edit `simu_config.json` to set your data paths, launchers, and session configs.
+
 Launch the executable from the build directory:
 
 ```bash
