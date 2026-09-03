@@ -31,6 +31,7 @@
 #include "Initial.h"
 #include "AppContext.h"
 #include "bswTime.h"
+#include "session/a_train_session.h"
 #include "session/ext_session.h"
 #include "session/maint_session.h"
 #include "session/other_asw_session.h"
@@ -301,6 +302,22 @@ static void SessionInit(AppContext* ctx, const nlohmann::json& root_config)
 	else
 	{
 		log->warn("snmp_sessions array missing");
+	}
+
+	ctx->a_train_session_instance.reset();
+	if (session_config.contains("a_train_session") && session_config["a_train_session"].is_object())
+	{
+		std::unique_ptr<a_train_session> a_train_ptr(new a_train_session(session_config["a_train_session"]));
+		if (a_train_ptr->connection())
+		{
+			const connection_result open_result = a_train_ptr->connection()->open();
+			if (open_result != connection_result::ok)
+			{
+				log->warn("failed to open a_train session connection: name=%s",
+					a_train_ptr->name().c_str());
+			}
+		}
+		ctx->a_train_session_instance = std::move(a_train_ptr);
 	}
 
 	ctx->pxi_session_instance.reset();

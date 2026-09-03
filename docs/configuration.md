@@ -139,6 +139,7 @@ Used to host a TCP server that external clients can connect to.
   - `"dmi"`: DMI framing (magic `0x55 0xAA`, single-byte length at offset 3).
   - `"2-byte-len-big"`: 2-byte length prefix framing, big-endian length field.
   - `"2-byte-len-little"`: 2-byte length prefix framing, little-endian length field.
+  - `"ndjson"`: Newline-delimited JSON. Receive: one line per `receive()`, delivered without the trailing `\n` (a trailing `\r` is also stripped); empty lines are skipped; lines that do not fit the receive buffer are dropped and the stream resyncs on the next line. Send: a `\n` is appended unless the payload already ends with one.
 - `send_framing`: (Optional, default `"none"`) Auto-prepends framing header to outgoing data. Same values as `receive_framing`.
 
 *Example:*
@@ -166,6 +167,7 @@ Used to connect as a client to an external TCP server.
   - `"dmi"`: DMI framing (magic `0x55 0xAA`, single-byte length at offset 3).
   - `"2-byte-len-big"`: 2-byte length prefix framing, big-endian length field.
   - `"2-byte-len-little"`: 2-byte length prefix framing, little-endian length field.
+  - `"ndjson"`: Newline-delimited JSON. Receive: one line per `receive()`, delivered without the trailing `\n` (a trailing `\r` is also stripped); empty lines are skipped; lines that do not fit the receive buffer are dropped and the stream resyncs on the next line. Send: a `\n` is appended unless the payload already ends with one.
 - `send_framing`: (Optional, default `"none"`) Auto-prepends framing header to outgoing data. Same values as `receive_framing`.
 
 *Example:*
@@ -221,6 +223,24 @@ Used for safety-critical connections like RBC and TSRS. Supports advanced timing
 
 #### `other_asw_sessions`
 Used to control internal software messaging behavior (e.g., between ATP and ATO). They typically use the standard `name`, `id`, and `is_skip` properties without requiring a `connection` block.
+
+#### `a_train_session`
+Single-instance (not an array) placeholder category for A-train related links, like `pxi_session`. The section is optional; entries use the `name` property and an optional `connection` block (any connection type). There is no `id` field. Each cycle the session drains the connection (received content is discarded, logged at trace level under module `a_train`) and sends a fixed NDJSON dummy payload line:
+```
+{"type":"a_train","dummy":true}\n
+```
+
+*Example:*
+```json
+"a_train_session": {
+    "name": "a-train",
+    "connection": {
+        "type": "tcp_server",
+        "local_ip": "127.0.0.1",
+        "local_port": 19022
+    }
+}
+```
 
 #### `pxi_session`
 Specialized session mapping hardware I/O lines to network packets for PXI test benches. This session also supports the standard session fields (`name`, `id`) and maintains a `connection` internally that the simulator opens.

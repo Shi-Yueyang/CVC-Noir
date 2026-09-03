@@ -125,7 +125,10 @@ void SyncInput(AppContext* ctx)
 		}
 	}
 
-
+	if (ctx->a_train_session_instance)
+	{
+		(void)ctx->a_train_session_instance->input();
+	}
 
 	if (ctx->pxi_session_instance)
 	{
@@ -191,6 +194,11 @@ void SyncOutput(AppContext* ctx)
 		{
 			(void)session_ptr->output();
 		}
+	}
+
+	if (ctx->a_train_session_instance)
+	{
+		(void)ctx->a_train_session_instance->output();
 	}
 
 	if (ctx->pxi_session_instance)

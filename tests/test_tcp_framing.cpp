@@ -261,6 +261,125 @@ static void test_has_dmi_magic()
 	check(!tcp_framing_has_dmi_magic(buf, 3), "magic: index 3 = false (not enough bytes)");
 }
 
+/* ── Receive: NDJSON ── */
+
+static std::vector<unsigned char> to_buf(const char* text)
+{
+	const unsigned char* p = reinterpret_cast<const unsigned char*>(text);
+	return std::vector<unsigned char>(p, p + std::strlen(text));
+}
+
+static void test_ndjson_no_newline_incomplete()
+{
+	std::vector<unsigned char> buf = to_buf("{\"a\":1}");
+	unsigned char out[64] = {};
+	std::size_t sz = 0;
+	check(!tcp_framing_try_extract_ndjson_line(buf, out, sizeof(out), &sz),
+		"ndjson: no terminator returns false");
+	check(buf.size() == 7, "ndjson: buffer untouched on incomplete line");
+}
+
+static void test_ndjson_single_line()
+{
+	std::vector<unsigned char> buf = to_buf("{\"a\":1}\n");
+	unsigned char out[64] = {};
+	std::size_t sz = 0;
+	check(tcp_framing_try_extract_ndjson_line(buf, out, sizeof(out), &sz),
+		"ndjson: complete line extracted");
+	check(sz == 7 && 0 == std::memcmp(out, "{\"a\":1}", 7), "ndjson: line delivered without newline");
+	check(buf.empty(), "ndjson: buffer drained after extraction");
+}
+
+static void test_ndjson_two_lines_one_chunk()
+{
+	std::vector<unsigned char> buf = to_buf("{\"n\":1}\n{\"n\":2}\n");
+	unsigned char out[64] = {};
+	std::size_t sz = 0;
+	check(tcp_framing_try_extract_ndjson_line(buf, out, sizeof(out), &sz)
+		&& sz == 7 && 0 == std::memcmp(out, "{\"n\":1}", 7),
+		"ndjson: first line extracted");
+	check(tcp_framing_try_extract_ndjson_line(buf, out, sizeof(out), &sz)
+		&& sz == 7 && 0 == std::memcmp(out, "{\"n\":2}", 7),
+		"ndjson: second line extracted from buffer");
+	check(!tcp_framing_try_extract_ndjson_line(buf, out, sizeof(out), &sz),
+		"ndjson: empty buffer after both lines");
+}
+
+static void test_ndjson_crlf_stripped()
+{
+	std::vector<unsigned char> buf = to_buf("{\"a\":1}\r\n");
+	unsigned char out[64] = {};
+	std::size_t sz = 0;
+	check(tcp_framing_try_extract_ndjson_line(buf, out, sizeof(out), &sz),
+		"ndjson: CRLF line extracted");
+	check(sz == 7 && 0 == std::memcmp(out, "{\"a\":1}", 7), "ndjson: CR stripped from line end");
+}
+
+static void test_ndjson_skips_empty_lines()
+{
+	std::vector<unsigned char> buf = to_buf("\n\n{\"a\":1}\n");
+	unsigned char out[64] = {};
+	std::size_t sz = 0;
+	check(tcp_framing_try_extract_ndjson_line(buf, out, sizeof(out), &sz),
+		"ndjson: empty lines skipped");
+	check(sz == 7 && 0 == std::memcmp(out, "{\"a\":1}", 7), "ndjson: first non-empty line returned");
+}
+
+static void test_ndjson_oversized_line_dropped()
+{
+	std::vector<unsigned char> buf = to_buf("0123456789\n{ok}\n");
+	unsigned char out[4] = {};
+	std::size_t sz = 0;
+	check(tcp_framing_try_extract_ndjson_line(buf, out, sizeof(out), &sz),
+		"ndjson: oversized line dropped, next line delivered");
+	check(sz == 4 && 0 == std::memcmp(out, "{ok}", 4), "ndjson: oversized line content skipped");
+}
+
+/* ── Send: NDJSON ── */
+
+static void test_send_ndjson_appends_newline()
+{
+	const unsigned char payload[] = { '{', '}', };
+	unsigned char framed[64] = {};
+	std::size_t sz = tcp_framing_build_ndjson_send_frame(payload, 2, framed, sizeof(framed));
+	check(sz == 3, "send-ndjson: newline appended");
+	check(framed[2] == 0x0A, "send-ndjson: terminated with LF");
+}
+
+static void test_send_ndjson_no_double_newline()
+{
+	const unsigned char payload[] = { 'a', '\n' };
+	unsigned char framed[64] = {};
+	std::size_t sz = tcp_framing_build_ndjson_send_frame(payload, 2, framed, sizeof(framed));
+	check(sz == 2 && framed[1] == '\n', "send-ndjson: already-terminated payload unchanged");
+}
+
+static void test_send_ndjson_capacity()
+{
+	unsigned char payload[8];
+	std::memset(payload, 'x', sizeof(payload));
+	unsigned char framed[8] = {};
+	check(tcp_framing_build_ndjson_send_frame(payload, 8, framed, sizeof(framed)) == 0,
+		"send-ndjson: zero return when capacity exceeded");
+}
+
+static void test_roundtrip_ndjson()
+{
+	const char* text = "{\"type\":\"a_train\",\"dummy\":true}";
+	const std::size_t len = std::strlen(text);
+	unsigned char framed[128] = {};
+	std::size_t framed_sz = tcp_framing_build_ndjson_send_frame(text, len, framed, sizeof(framed));
+	check(framed_sz == len + 1, "roundtrip-ndjson: framed size = payload + LF");
+
+	std::vector<unsigned char> buf(framed, framed + framed_sz);
+	unsigned char extracted[128] = {};
+	std::size_t extracted_sz = 0;
+	check(tcp_framing_try_extract_ndjson_line(buf, extracted, sizeof(extracted), &extracted_sz),
+		"roundtrip-ndjson: extraction succeeded");
+	check(extracted_sz == len && 0 == std::memcmp(extracted, text, len),
+		"roundtrip-ndjson: payload round-trips");
+}
+
 int main()
 {
 	std::printf("=== tcp_framing unit tests ===\n\n");
@@ -297,6 +416,22 @@ int main()
 
 	std::printf("\n--- Magic detection ---\n");
 	test_has_dmi_magic();
+
+	std::printf("\n--- Receive: NDJSON ---\n");
+	test_ndjson_no_newline_incomplete();
+	test_ndjson_single_line();
+	test_ndjson_two_lines_one_chunk();
+	test_ndjson_crlf_stripped();
+	test_ndjson_skips_empty_lines();
+	test_ndjson_oversized_line_dropped();
+
+	std::printf("\n--- Send: NDJSON ---\n");
+	test_send_ndjson_appends_newline();
+	test_send_ndjson_no_double_newline();
+	test_send_ndjson_capacity();
+
+	std::printf("\n--- Round-trip: NDJSON ---\n");
+	test_roundtrip_ndjson();
 
 	std::printf("\n=== Results: %d passed, %d failed ===\n", s_passed, s_failed);
 	return (s_failed == 0) ? 0 : 1;

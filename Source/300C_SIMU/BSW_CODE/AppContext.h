@@ -5,6 +5,7 @@
 #include <memory>
 #include <vector>
 
+#include "session/a_train_session.h"
 #include "session/ext_session.h"
 #include "session/maint_session.h"
 #include "session/other_asw_session.h"
@@ -25,6 +26,7 @@ typedef struct AppContext {
     std::vector<std::unique_ptr<session>> safety037_sessions;
     std::vector<std::unique_ptr<session>> snmp_sessions;
     std::int32_t train_pos_cm = 0;
+    std::unique_ptr<a_train_session> a_train_session_instance;
     std::unique_ptr<pxi_motion_session> pxi_motion_session_instance;
     std::unique_ptr<pxi_session> pxi_session_instance;
 } AppContext;

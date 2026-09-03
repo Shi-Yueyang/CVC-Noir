@@ -68,6 +68,10 @@ tcp_framing_method parse_tcp_framing_method(const nlohmann::json& config, const 
 	{
 		return tcp_framing_method::two_byte_len_little;
 	}
+	if (framing == "ndjson")
+	{
+		return tcp_framing_method::ndjson;
+	}
 
 	return tcp_framing_method::none;
 }

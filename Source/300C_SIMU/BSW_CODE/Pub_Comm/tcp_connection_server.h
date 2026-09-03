@@ -56,6 +56,7 @@ private:
 		std::size_t capacity,
 		std::size_t* received_size,
 		bool big_endian) noexcept;
+	connection_result receive_ndjson_line(void* buffer, std::size_t capacity, std::size_t* received_size) noexcept;
 	static std::uintptr_t invalid_socket_handle() noexcept;
 
 	std::uintptr_t listen_socket_handle_;

@@ -725,6 +725,15 @@ connection_result tcp_connection_server::send(const void* data, std::size_t size
 		}
 		raw_data = framed_buf;
 	}
+	else if (send_framing_method_ == tcp_framing_method::ndjson)
+	{
+		raw_size = tcp_framing_build_ndjson_send_frame(data, size, framed_buf, sizeof(framed_buf));
+		if (raw_size == 0U)
+		{
+			return connection_result::invalid_argument;
+		}
+		raw_data = framed_buf;
+	}
 
 	const unsigned char* send_buffer = raw_data;
 	std::size_t send_size = raw_size;
@@ -803,6 +812,10 @@ connection_result tcp_connection_server::receive(void* buffer, std::size_t capac
 	if (receive_framing_method_ == tcp_framing_method::two_byte_len_little)
 	{
 		return receive_two_byte_len_frame(buffer, capacity, received_size, false);
+	}
+	if (receive_framing_method_ == tcp_framing_method::ndjson)
+	{
+		return receive_ndjson_line(buffer, capacity, received_size);
 	}
 
 	return receive_raw(buffer, capacity, received_size);
@@ -912,6 +925,72 @@ connection_result tcp_connection_server::receive_dmi_frame(void* buffer, std::si
 		if (*received_size > capacity)
 		{
 			return connection_result::invalid_argument;
+		}
+
+		if (!tcp_connection_server_is_readable(static_cast<socket_t>(client_socket_handle_)))
+		{
+			return connection_result::would_block;
+		}
+	}
+}
+
+connection_result tcp_connection_server::receive_ndjson_line(void* buffer, std::size_t capacity, std::size_t* received_size) noexcept
+{
+	std::array<unsigned char, kTcpFramingReceiveChunkSize> chunk = {};
+	connection_result client_result;
+
+	if (tcp_framing_try_extract_ndjson_line(receive_buffer_, buffer, capacity, received_size))
+	{
+		return connection_result::ok;
+	}
+
+	client_result = ensure_client_connected();
+	if (client_result != connection_result::ok)
+	{
+		return client_result;
+	}
+
+	if (!tcp_connection_server_is_readable(static_cast<socket_t>(client_socket_handle_)))
+	{
+		return connection_result::would_block;
+	}
+
+	for (;;)
+	{
+#ifdef _WIN32
+		const int received = recv(
+			static_cast<socket_t>(client_socket_handle_),
+			reinterpret_cast<char*>(chunk.data()),
+			static_cast<int>(chunk.size()),
+			0);
+#else
+		const ssize_t received_raw = recv(
+			static_cast<socket_t>(client_socket_handle_),
+			chunk.data(),
+			chunk.size(),
+			0);
+		const int received = (received_raw < 0) ? (int)received_raw : (int)received_raw;
+#endif
+		if (received == SOCKET_ERR)
+		{
+			last_socket_error_ = tcp_connection_server_get_last_error();
+			if (last_socket_error_ == CONN_RESET_ERR || last_socket_error_ == NOT_CONN_ERR)
+			{
+				close_client();
+			}
+			return map_receive_error(last_socket_error_);
+		}
+
+		if (received == 0)
+		{
+			close_client();
+			return connection_result::would_block;
+		}
+
+		receive_buffer_.insert(receive_buffer_.end(), chunk.begin(), chunk.begin() + received);
+		if (tcp_framing_try_extract_ndjson_line(receive_buffer_, buffer, capacity, received_size))
+		{
+			return connection_result::ok;
 		}
 
 		if (!tcp_connection_server_is_readable(static_cast<socket_t>(client_socket_handle_)))

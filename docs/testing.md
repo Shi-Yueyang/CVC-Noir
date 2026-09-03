@@ -43,6 +43,7 @@ Complete all steps and mark checklist before finishing.
 4. ☐ **Run scenario scripts** (when applicable)
    - Protocol/framing checks: `skills/tcp_framing_test.py`.
    - Dataplug/PDA preparation: `skills/create-dataplug/create_dataplug.py`.
+   - C++ unit tests live in `tests/` (each `test_*.cpp` is a CMake target); run with `ctest --test-dir build`.
    - Add focused skills under `skills/` when needed.
 
 5. ☐ **Verify evidence**
