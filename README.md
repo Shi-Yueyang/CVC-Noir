@@ -18,7 +18,7 @@ Place your domain logic folder under `Source/`. CMake auto-detects `ATP_CODE`, `
 
 ```bash
 cmake -B build -DCMAKE_BUILD_TYPE=Debug
-cmake --build build
+cmake --build build --config Debug
 ```
 
 To use a custom folder name:
@@ -29,30 +29,47 @@ cmake -B build -DDOMAIN_CODE_DIR=Source/MyDomain -DCMAKE_BUILD_TYPE=Debug
 
 To build the simulator without domain logic (simulator-only mode), ensure none of the default folders exist or point to a non-existent path.
 
-### Linux
-
-```bash
-cmake -B build -DCMAKE_BUILD_TYPE=Debug
-cmake --build build
-```
-
 Other build variants:
 
 ```bash
 cmake -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build
+cmake --build build --config Release
 ```
 
-### Windows
+The `--config` option works with both single-config generators (such as Makefiles or Ninja) and multi-config generators (such as Visual Studio).
 
-```powershell
-cmake -B build -DCMAKE_BUILD_TYPE=Debug
+### Build targets
+
+Build all default targets, including the simulator and tests:
+
+```bash
 cmake --build build --config Debug
 ```
 
-```powershell
-cmake -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build --config Release
+Build the main simulator only:
+
+```bash
+cmake --build build --target Win300C --config Debug
+```
+
+Build an individual test target:
+
+```bash
+cmake --build build --target test_a_train_session --config Debug
+cmake --build build --target test_tcp_framing --config Debug
+```
+
+Run all registered tests after building:
+
+```bash
+ctest --test-dir build --build-config Debug --output-on-failure
+```
+
+Configure without test targets:
+
+```bash
+cmake -B build -DBUILD_TESTS=OFF -DCMAKE_BUILD_TYPE=Debug
+cmake --build build --target Win300C --config Debug
 ```
 
 Output binaries are written to the `build/` directory.

@@ -2,13 +2,22 @@
 #define A_TRAIN_SESSION_INCLUDE
 
 #include <cstddef>
+#include <string>
 
+#include "../../ASW_300C/Interface_Data.h"
 #include "session.h"
 
-inline const char* a_train_dummy_payload_line() noexcept
+inline constexpr const char* a_train_hardcoded_train_id() noexcept
 {
-	return "{\"type\":\"a_train\",\"dummy\":true}\n";
+	return "TRAIN001";
 }
+
+inline constexpr int a_train_hardcoded_cab_id() noexcept
+{
+	return 1;
+}
+
+std::string a_train_atp_payload_line(const IOData_t& vob_data);
 
 class a_train_session : public session
 {

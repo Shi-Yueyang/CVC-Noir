@@ -5,6 +5,12 @@
 #include <string>
 
 #include "json.hpp"
+#include "ASW_300C/Interface_Data.h"
+
+extern "C" INT32S CVC_BSW_ITF_Read(CVC_BSW_MSG_TYPE_ENUM, INT8U*)
+{
+	return CVC_BUFFER_OPER_EMPTY;
+}
 
 static int s_passed = 0;
 static int s_failed = 0;
@@ -52,9 +58,15 @@ static void test_is_skip_short_circuits()
 	check(session.output() == session_result::ok, "a_train: output ok when skipped");
 }
 
-static void test_payload_is_ndjson()
+static void test_payload_is_atp_command()
 {
-	const std::string line = a_train_dummy_payload_line();
+	IOData_t vob_data = {};
+	vob_data.Length = 4U;
+	vob_data.IOPortData[0] = { 0U, 0U };
+	vob_data.IOPortData[1] = { 2U, 1U };
+	vob_data.IOPortData[2] = { 4U, 1U };
+	vob_data.IOPortData[3] = { 16U, 1U };
+	const std::string line = a_train_atp_payload_line(vob_data);
 
 	check(!line.empty() && line.back() == '\n', "a_train: payload ends with newline");
 	check(line.find('\n') == line.size() - 1U, "a_train: payload is exactly one NDJSON line");
@@ -70,6 +82,14 @@ static void test_payload_is_ndjson()
 		parsed = false;
 	}
 	check(parsed, "a_train: payload line is valid JSON object");
+	if (parsed)
+	{
+		const nlohmann::json obj = nlohmann::json::parse(line);
+		check(obj["type"] == "atp_command", "a_train: payload type is atp_command");
+		check(obj["train_id"] == "TRAIN001", "a_train: payload uses hardcoded train id");
+		check(obj["cab_id"] == 1, "a_train: payload uses hardcoded cab id");
+		check(obj["atp_signal"] == "00101_00000_00000_01", "a_train: payload maps and groups VOB bits");
+	}
 }
 
 static void test_connection_created_from_config()
@@ -89,7 +109,7 @@ static void test_connection_created_from_config()
 	check(session.connection()->open() == connection_result::ok, "a_train: dummy connection opens");
 	check(session.input() == session_result::ok, "a_train: input drains pending payload");
 	check(session.input() == session_result::would_block, "a_train: input would_block when drained");
-	check(session.output() == session_result::ok, "a_train: output sends dummy payload");
+	check(session.output() == session_result::would_block, "a_train: output would_block when no VOB data is pending");
 }
 
 int main()
@@ -97,7 +117,7 @@ int main()
 	test_parses_common_fields();
 	test_no_connection_returns_invalid();
 	test_is_skip_short_circuits();
-	test_payload_is_ndjson();
+	test_payload_is_atp_command();
 	test_connection_created_from_config();
 
 	std::printf("test_a_train_session: %d passed, %d failed\n", s_passed, s_failed);

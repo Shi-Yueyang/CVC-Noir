@@ -225,9 +225,9 @@ Used for safety-critical connections like RBC and TSRS. Supports advanced timing
 Used to control internal software messaging behavior (e.g., between ATP and ATO). They typically use the standard `name`, `id`, and `is_skip` properties without requiring a `connection` block.
 
 #### `a_train_session`
-Single-instance (not an array) placeholder category for A-train related links, like `pxi_session`. The section is optional; entries use the `name` property and an optional `connection` block (any connection type). There is no `id` field. Each cycle the session drains the connection (received content is discarded, logged at trace level under module `a_train`) and sends a fixed NDJSON dummy payload line:
+Single-instance (not an array) category for A-train related links, like `pxi_session`. The section is optional; entries use the `name` property and an optional `connection` block (any connection type). There is no `id` field. Each cycle the session drains the connection (received content is discarded, logged at trace level under module `a_train`) and drains pending VOB output messages. Each VOB message is sent as one NDJSON `atp_command` line. The temporary hardcoded identity is `train_id: "TRAIN001"`, `cab_id: 1`; `atp_signal` contains one bit per VOB port index, with missing indices set to `0`, and an underscore is inserted after every five bits.
 ```
-{"type":"a_train","dummy":true}\n
+{"type":"atp_command","train_id":"TRAIN001","cab_id":1,"atp_signal":"0100..."}\n
 ```
 
 *Example:*
