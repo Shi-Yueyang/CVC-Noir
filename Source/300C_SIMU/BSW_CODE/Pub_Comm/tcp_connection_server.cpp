@@ -1,5 +1,7 @@
 #include "tcp_connection_server.h"
 
+#include "logging/logger.h"
+
 #include <climits>
 #include <cstring>
 
@@ -37,6 +39,8 @@ namespace
 	#define CONN_RESET_ERR WSAECONNRESET
 	#define NOT_CONN_ERR WSAENOTCONN
 	#define INVAL_ERR WSAEINVAL
+
+	typedef int tcp_connection_server_socklen;
 
 	int tcp_connection_server_get_last_error() noexcept
 	{
@@ -202,6 +206,8 @@ namespace
 	#define NOT_CONN_ERR ENOTCONN
 	#define INVAL_ERR EINVAL
 
+	typedef socklen_t tcp_connection_server_socklen;
+
 	int tcp_connection_server_get_last_error() noexcept
 	{
 		return errno;
@@ -341,6 +347,32 @@ namespace
 	}
 
 #endif /* _WIN32 / POSIX */
+
+	void tcp_connection_server_format_endpoint(
+		const struct sockaddr* addr,
+		char* ip_text,
+		std::size_t ip_text_size,
+		unsigned* port) noexcept
+	{
+		const char* const k_unknown = "unknown";
+		std::size_t copy_len = 0U;
+
+		*port = 0U;
+
+		if ((addr != nullptr) && (addr->sa_family == AF_INET))
+		{
+			const struct sockaddr_in* ipv4 = reinterpret_cast<const struct sockaddr_in*>(addr);
+			if (inet_ntop(AF_INET, &ipv4->sin_addr, ip_text, static_cast<tcp_connection_server_socklen>(ip_text_size)) != nullptr)
+			{
+				*port = static_cast<unsigned>(ntohs(ipv4->sin_port));
+				return;
+			}
+		}
+
+		copy_len = (ip_text_size - 1U < strlen(k_unknown)) ? (ip_text_size - 1U) : strlen(k_unknown);
+		memcpy(ip_text, k_unknown, copy_len);
+		ip_text[copy_len] = '\0';
+	}
 
 	connection_result map_send_error(int error_code) noexcept
 	{
@@ -683,6 +715,31 @@ connection_result tcp_connection_server::ensure_client_connected() noexcept
 
 	client_socket_handle_ = static_cast<std::uintptr_t>(client_socket);
 	receive_buffer_.clear();
+	{
+		struct sockaddr_storage local_addr;
+		struct sockaddr_storage peer_addr;
+		tcp_connection_server_socklen local_len = static_cast<tcp_connection_server_socklen>(sizeof(local_addr));
+		tcp_connection_server_socklen peer_len = static_cast<tcp_connection_server_socklen>(sizeof(peer_addr));
+		const struct sockaddr* local_addr_ptr = nullptr;
+		const struct sockaddr* peer_addr_ptr = nullptr;
+		char server_ip_text[46];
+		char client_ip_text[46];
+		unsigned server_port = 0U;
+		unsigned client_port = 0U;
+
+		if (getsockname(client_socket, reinterpret_cast<struct sockaddr*>(&local_addr), &local_len) == 0)
+		{
+			local_addr_ptr = reinterpret_cast<const struct sockaddr*>(&local_addr);
+		}
+		if (getpeername(client_socket, reinterpret_cast<struct sockaddr*>(&peer_addr), &peer_len) == 0)
+		{
+			peer_addr_ptr = reinterpret_cast<const struct sockaddr*>(&peer_addr);
+		}
+
+		tcp_connection_server_format_endpoint(local_addr_ptr, server_ip_text, sizeof(server_ip_text), &server_port);
+		tcp_connection_server_format_endpoint(peer_addr_ptr, client_ip_text, sizeof(client_ip_text), &client_port);
+		::log_info("simulation", "client connected to tcp server %s:%u from %s:%u", server_ip_text, server_port, client_ip_text, client_port);
+	}
 	return connection_result::ok;
 }
 
