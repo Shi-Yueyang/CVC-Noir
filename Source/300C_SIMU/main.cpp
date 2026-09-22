@@ -269,20 +269,4 @@ void check_log_config_reload(const std::string& config_path)
 		::log_info("simulation", "log config reloaded");
 	}
 }
-
-#ifdef _WIN32
-BOOL WINAPI console_control_handler(DWORD control_type)
-{
-	switch (control_type)
-	{
-	case CTRL_CLOSE_EVENT:
-	case CTRL_LOGOFF_EVENT:
-	case CTRL_SHUTDOWN_EVENT:
-		perform_application_shutdown();
-		return TRUE;
-	default:
-		return FALSE;
-	}
-}
-#endif
 }

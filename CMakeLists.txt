@@ -153,10 +153,14 @@ if(BUILD_TESTS)
 	add_executable(test_tcp_framing "tests/test_tcp_framing.cpp")
 	target_include_directories(test_tcp_framing PRIVATE
 		"Source/300C_SIMU/BSW_CODE/Pub_Comm")
-	target_compile_options(test_tcp_framing PRIVATE
-		-Wall -Wextra
-		-Wno-sign-compare -Wno-unused-parameter -Wno-unused-variable
-	)
+	if(MSVC)
+		target_compile_options(test_tcp_framing PRIVATE /utf-8)
+	else()
+		target_compile_options(test_tcp_framing PRIVATE
+			-Wall -Wextra
+			-Wno-sign-compare -Wno-unused-parameter -Wno-unused-variable
+		)
+	endif()
 	add_test(NAME test_tcp_framing COMMAND test_tcp_framing)
 
 	add_executable(test_a_train_session
@@ -176,10 +180,14 @@ if(BUILD_TESTS)
 		"Source/300C_SIMU/BSW_CODE/Pub_Comm"
 		"Source/300C_SIMU/EXTERNAL"
 	)
-	target_compile_options(test_a_train_session PRIVATE
-		-Wall -Wextra
-		-Wno-sign-compare -Wno-unused-parameter -Wno-unused-variable
-	)
+	if(MSVC)
+		target_compile_options(test_a_train_session PRIVATE /utf-8)
+	else()
+		target_compile_options(test_a_train_session PRIVATE
+			-Wall -Wextra
+			-Wno-sign-compare -Wno-unused-parameter -Wno-unused-variable
+		)
+	endif()
 	if(WIN32)
 		target_link_libraries(test_a_train_session PRIVATE ws2_32)
 	else()
