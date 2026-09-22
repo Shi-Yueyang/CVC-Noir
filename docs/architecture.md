@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Win300C is a host-side simulator for the 300C embedded system.
+cvc-noir is a host-side simulator for the 300C embedded system.
 
 - `Source/300C_SIMU` contains simulator runtime, host integrations, and platform-side adapters.
 - Domain logic (e.g. `Source/ATP_CODE`) contains embedded C code, managed externally by each team.

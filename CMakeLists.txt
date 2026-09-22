@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(Win300C LANGUAGES C CXX)
+project(cvc-noir LANGUAGES C CXX)
 
 # C++17 standard
 set(CMAKE_CXX_STANDARD 17)
@@ -46,19 +46,19 @@ endif()
 set(ALL_SOURCES ${SIMU_SOURCES} ${DOMAIN_SOURCES})
 
 # ── Executable ────────────────────────────────────────────────
-add_executable(Win300C ${ALL_SOURCES})
+add_executable(cvc-noir ${ALL_SOURCES})
 
 # ── Include directories ──────────────────────────────────────
-target_include_directories(Win300C PRIVATE
+target_include_directories(cvc-noir PRIVATE
     "Source/300C_SIMU"
     "Source/300C_SIMU/EXTERNAL"
 )
 if(DOMAIN_CODE_DIR AND IS_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/${DOMAIN_CODE_DIR}")
-    target_include_directories(Win300C PRIVATE "${DOMAIN_CODE_DIR}")
+    target_include_directories(cvc-noir PRIVATE "${DOMAIN_CODE_DIR}")
 endif()
 
 # ── Preprocessor defines ─────────────────────────────────────
-target_compile_definitions(Win300C PRIVATE
+target_compile_definitions(cvc-noir PRIVATE
     API_PRINTF_IS_PRINTF
 
     # Windows-specific
@@ -79,37 +79,37 @@ target_compile_definitions(Win300C PRIVATE
 
 # On Windows, also define WIN32
 if(WIN32)
-    target_compile_definitions(Win300C PRIVATE WIN32)
+    target_compile_definitions(cvc-noir PRIVATE WIN32)
 endif()
 
 # On Linux, define _LINUX for code that needs a Linux branch
 if(UNIX AND NOT APPLE)
-    target_compile_definitions(Win300C PRIVATE __linux__ _LINUX)
+    target_compile_definitions(cvc-noir PRIVATE __linux__ _LINUX)
 endif()
 
 # ── Compiler options ──────────────────────────────────────────
 if(MSVC)
     # Match the VS project settings
-    target_compile_options(Win300C PRIVATE
+    target_compile_options(cvc-noir PRIVATE
         /utf-8
         /MP   # multi-processor compilation
         /wd4828  # disable "illegal character" warning for GBK comments
     )
     # Disable specific MSVC warnings (mirrors #pragma in code)
-    target_compile_options(Win300C PRIVATE
+    target_compile_options(cvc-noir PRIVATE
         /wd4057 /wd4100 /wd4127 /wd4189 /wd4244 /wd4293 /wd4389
     )
     # Release optimizations
-    target_compile_options(Win300C PRIVATE
+    target_compile_options(cvc-noir PRIVATE
         $<$<CONFIG:Release>:/O2>
     )
 else()
     # GCC / Clang
-    target_compile_options(Win300C PRIVATE
+    target_compile_options(cvc-noir PRIVATE
         -Wall -Wextra
     )
     # Suppress warnings the ATP_CODE generates (lots of sign-compare, unused-parameter etc.)
-    target_compile_options(Win300C PRIVATE
+    target_compile_options(cvc-noir PRIVATE
         -Wno-sign-compare
         -Wno-unused-parameter
         -Wno-unused-variable
@@ -125,7 +125,7 @@ else()
         -Wno-char-subscripts
     )
     # Debug / Release
-    target_compile_options(Win300C PRIVATE
+    target_compile_options(cvc-noir PRIVATE
         $<$<CONFIG:Debug>:-g -O0>
         $<$<CONFIG:Release>:-O2 -DNDEBUG>
     )
@@ -133,16 +133,16 @@ endif()
 
 # ── Link libraries ────────────────────────────────────────────
 if(WIN32)
-    target_link_libraries(Win300C PRIVATE ws2_32)
+    target_link_libraries(cvc-noir PRIVATE ws2_32)
 else()
     # POSIX: need pthread for spdlog async logger; librt for clock_gettime (glibc < 2.17)
-    target_link_libraries(Win300C PRIVATE pthread)
+    target_link_libraries(cvc-noir PRIVATE pthread)
 
     # Check if clock_gettime needs -lrt (older glibc)
     include(CheckLibraryExists)
     check_library_exists(rt clock_gettime "" HAVE_CLOCK_GETTIME_IN_RT)
     if(HAVE_CLOCK_GETTIME_IN_RT)
-        target_link_libraries(Win300C PRIVATE rt)
+        target_link_libraries(cvc-noir PRIVATE rt)
     endif()
 endif()
 

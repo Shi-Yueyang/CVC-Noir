@@ -28,20 +28,20 @@
 /Release/
 /x64/
 /x86/
-/Win300C/Debug/
-/Win300C/Release/
+/cvc-noir/Debug/
+/cvc-noir/Release/
 /build
 /refs
 /logs
 # Binaries produced by local builds
-/Win300C/*.exe
-/Win300C/*.dll
-/Win300C/*.lib
-/Win300C/*.exp
+/cvc-noir/*.exe
+/cvc-noir/*.dll
+/cvc-noir/*.lib
+/cvc-noir/*.exp
 
 # Logs and runtime output
 /Log/
-/Win300C/Log_folder/
+/cvc-noir/Log_folder/
 *.log
 
 # MSBuild and compiler logs

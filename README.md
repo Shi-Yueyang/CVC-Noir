@@ -1,6 +1,6 @@
-# Win300C
+# cvc-noir
 
-Win300C is a host-side simulator for the 300C embedded system.
+cvc-noir is a host-side simulator for the 300C embedded system.
 
 ## Quick picture
 
@@ -49,7 +49,7 @@ cmake --build build --config Debug
 Build the main simulator only:
 
 ```bash
-cmake --build build --target Win300C --config Debug
+cmake --build build --target cvc-noir --config Debug
 ```
 
 Build an individual test target:
@@ -69,7 +69,7 @@ Configure without test targets:
 
 ```bash
 cmake -B build -DBUILD_TESTS=OFF -DCMAKE_BUILD_TYPE=Debug
-cmake --build build --target Win300C --config Debug
+cmake --build build --target cvc-noir --config Debug
 ```
 
 Output binaries are written to the `build/` directory.
@@ -87,19 +87,19 @@ Edit `simu_config.json` to set your data paths, launchers, and session configs.
 Launch the executable from the build directory:
 
 ```bash
-cd build && ./Win300C
+cd build && ./cvc-noir
 ```
 
 On Windows:
 
 ```powershell
-cd build && .\Debug\Win300C.exe
+cd build && .\Debug\cvc-noir.exe
 ```
 
 By default the simulator loads `simu_config.json` from the current working directory. An optional positional argument selects a different config file (absolute or relative path):
 
 ```bash
-./Win300C path/to/simu_config_test.json
+./cvc-noir path/to/simu_config_test.json
 ```
 
 ## Documentation

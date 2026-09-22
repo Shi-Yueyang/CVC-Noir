@@ -1,6 +1,6 @@
 ## Configuration Guide (`simu_config.json`)
 
-The `simu_config.json` file is the central configuration file for the Win300C simulator. It controls how the simulation environment operates, what external applications it launches, logging behavior, simulated hardware state, communication sessions, and data storage.
+The `simu_config.json` file is the central configuration file for the cvc-noir simulator. It controls how the simulation environment operates, what external applications it launches, logging behavior, simulated hardware state, communication sessions, and data storage.
 
 ### 1. Global Settings
 - `cycle_ms`: The main execution cycle duration of the simulator in milliseconds.
