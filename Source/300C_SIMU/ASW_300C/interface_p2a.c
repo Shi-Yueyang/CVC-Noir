@@ -29,11 +29,35 @@ typedef struct _PDA_OperationState_t
 {
     CVC_APP_PDA_STATE_t state;
     uint8_t fail_count;
+    uint64_t done_at_ms;  /* monotonic completion time for delayed ops; 0 = immediate */
+    uint8_t armed_op;     /* which op armed the current pending state */
 } PDA_OperationState_t;
 
-static PDA_OperationState_t nrnw_state = { CVC_PDA_NO_OPERATION, 0 };
-static PDA_OperationState_t araw_state = { CVC_PDA_NO_OPERATION, 0 };
-static PDA_OperationState_t arnw_state = { CVC_PDA_NO_OPERATION, 0 };
+#define PDA_ARM_NONE  0U
+#define PDA_ARM_READ  1U
+#define PDA_ARM_WRITE 2U
+
+static PDA_OperationState_t nrnw_state = { CVC_PDA_NO_OPERATION, 0, 0, PDA_ARM_NONE };
+static PDA_OperationState_t araw_state = { CVC_PDA_NO_OPERATION, 0, 0, PDA_ARM_NONE };
+static PDA_OperationState_t arnw_state = { CVC_PDA_NO_OPERATION, 0, 0, PDA_ARM_NONE };
+
+/* monotonic milliseconds (timer_TickGet returns 0.1ms units) */
+static uint64_t Pda_NowMs(void)
+{
+	return (uint64_t)(timer_TickGet() / 10.0);
+}
+
+static void Pda_ArmPending(PDA_OperationState_t* st, uint32_t delay_ms, uint8_t op)
+{
+	st->state = CVC_PDA_OPERATION_PENDING;
+	st->armed_op = op;
+	st->done_at_ms = (delay_ms == 0U) ? 0U : (Pda_NowMs() + (uint64_t)delay_ms);
+}
+
+static int Pda_DelayElapsed(const PDA_OperationState_t* st)
+{
+	return (st->done_at_ms == 0U) || (Pda_NowMs() >= st->done_at_ms);
+}
 
 CVC_T_Status API_ReadNewMsg(APPMSG_t* opAppMsg)
 {
@@ -446,6 +470,7 @@ APP_T_Status API_WriteUTCTime(uint32_t* const ipUTCTime)
 	return CVC_C_NO_ERROR;
 }
 
+// pda vital read
 CVC_APP_PDA_STATE_t API_ReadPDAVital(INT8U* opData, INT16U iSize, INT16U* opActualSize)
 {
 	CVC_APP_PDA_STATE_t retState = CVC_PDA_NO_AVAILABLE;
@@ -480,6 +505,7 @@ CVC_APP_PDA_STATE_t API_ReadPDAVital(INT8U* opData, INT16U iSize, INT16U* opActu
 }
 
 
+// pda vital status
 CVC_APP_PDA_STATE_t API_GetPDAVitalStatus(void)
 {
 	CVC_APP_PDA_STATE_t retState = CVC_PDA_NO_AVAILABLE;
@@ -487,6 +513,7 @@ CVC_APP_PDA_STATE_t API_GetPDAVitalStatus(void)
 	return retState;
 }
 
+// pda nvital read
 CVC_APP_PDA_STATE_t API_ReadPDANVital(INT8U* opData, INT16U iSize, INT16U* opActualSize)
 {
 	CVC_APP_PDA_STATE_t retState = CVC_PDA_NO_AVAILABLE;
@@ -521,6 +548,7 @@ CVC_APP_PDA_STATE_t API_ReadPDANVital(INT8U* opData, INT16U iSize, INT16U* opAct
 }
 
 
+// pda nvital status
 CVC_APP_PDA_STATE_t API_GetPDANVitalStatus(void)
 {
 	CVC_APP_PDA_STATE_t retState = CVC_PDA_NO_AVAILABLE;
@@ -558,15 +586,26 @@ const char* getFlashFileName(int iFileIndex)
 	return NULL;
 }
 
+/* configured read/write delay (ms) for a flash area; 0 when not configured */
+static uint32_t getFlashDelayMs(int iFileIndex, int isWrite)
+{
+	for (uint8_t i = 0; i < g_pda_storage_config.flash_count; i++)
+	{
+		if (g_pda_storage_config.flash[i].id == iFileIndex)
+		{
+			return isWrite ? g_pda_storage_config.flash[i].write_ms
+				: g_pda_storage_config.flash[i].read_ms;
+		}
+	}
+	return 0U;
+}
+
+static uint64_t pda_3_read_done_at[MAX_MASS_FLASH_NUM] = { 0 };
+static uint64_t pda_3_write_done_at[MAX_MASS_FLASH_NUM] = { 0 };
+
+// pda 1 read
 CVC_APP_PDA_STATE_t API_ReadNRNWData(unsigned char* opData, uint16_t iSize, uint16_t* opActualSize, unsigned char iMedia)
 {
-	// Validate media parameter (must be 1 for NRNW - Dataplug and NVRAM)
-	if (iMedia != 1)
-	{
-		printf("API_ReadNRNWData: invalid media value %d, must be 1\n", iMedia);
-		return CVC_PDA_OPERATION_FAILED;
-	}
-
 	// Validate parameters
 	if (opData == NULL || opActualSize == NULL)
 	{
@@ -581,14 +620,19 @@ CVC_APP_PDA_STATE_t API_ReadNRNWData(unsigned char* opData, uint16_t iSize, uint
 		return CVC_PDA_OPERATION_FAILED;
 	}
 
-	// Simulate async read operation (2 cycles)
-	// static int read_delay = 0;
-	// if (read_delay < 2)
-	// {
-	// 	read_delay++;
-	// 	return CVC_PDA_OPERATION_PENDING;
-	// }
-	// read_delay = 0;
+	/* delayed read poll: succeed once read_ms elapsed (buffer filled at arm time) */
+	if (g_pda_storage_config.nrnw.read_ms > 0U &&
+		nrnw_state.state == CVC_PDA_OPERATION_PENDING &&
+		nrnw_state.armed_op == PDA_ARM_READ)
+	{
+		if (!Pda_DelayElapsed(&nrnw_state))
+		{
+			return CVC_PDA_OPERATION_PENDING;
+		}
+		nrnw_state.state = CVC_PDA_OPERATION_SUCCEED;
+		nrnw_state.armed_op = PDA_ARM_NONE;
+		return CVC_PDA_OPERATION_SUCCEED;
+	}
 
 	// Open file
 	FILE* fp = fopen(g_pda_storage_config.nrnw.file, "rb");
@@ -637,20 +681,20 @@ CVC_APP_PDA_STATE_t API_ReadNRNWData(unsigned char* opData, uint16_t iSize, uint
 	}
 
 	*opActualSize = (uint16_t)bytesRead;
-	nrnw_state.state = CVC_PDA_OPERATION_SUCCEED;
 	nrnw_state.fail_count = 0;
+	if (g_pda_storage_config.nrnw.read_ms > 0U)
+	{
+		Pda_ArmPending(&nrnw_state, g_pda_storage_config.nrnw.read_ms, PDA_ARM_READ);
+		return CVC_PDA_OPERATION_PENDING;
+	}
+	nrnw_state.state = CVC_PDA_OPERATION_SUCCEED;
+	nrnw_state.armed_op = PDA_ARM_NONE;
 	return CVC_PDA_OPERATION_SUCCEED;
 }
 
+// pda 1 write
 CVC_APP_PDA_STATE_t API_WriteNRNWData(void* ipSource, uint16_t iSize, unsigned char iMedia)
 {
-	// Validate media parameter (must be 1 for NRNW - Dataplug and NVRAM)
-	if (iMedia != 1)
-	{
-		printf("API_WriteNRNWData: invalid media value %d, must be 1\n", iMedia);
-		return CVC_PDA_OPERATION_FAILED;
-	}
-
 	// Validate parameters
 	if (ipSource == NULL)
 	{
@@ -699,25 +743,24 @@ CVC_APP_PDA_STATE_t API_WriteNRNWData(void* ipSource, uint16_t iSize, unsigned c
 		return CVC_PDA_OPERATION_FAILED;
 	}
 
-	// Set state to pending, will be checked by GetNRNWStatus
-	nrnw_state.state = CVC_PDA_OPERATION_PENDING;
+	// Set state to pending, will be checked by GetNRNWStatus (respects write_ms)
+	Pda_ArmPending(&nrnw_state, g_pda_storage_config.nrnw.write_ms, PDA_ARM_WRITE);
 	return CVC_PDA_OPERATION_PENDING;
 }
 
+// pda 1 status
 CVC_APP_PDA_STATE_t API_GetNRNWStatus(unsigned char iMedia)
 {
-	// Validate media parameter (must be 1 for NRNW)
-	if (iMedia != 1)
-	{
-		printf("API_GetNRNWStatus: invalid media value %d, must be 1\n", iMedia);
-		return CVC_PDA_OPERATION_FAILED;
-	}
-
-	// Simulate async write completion (1 cycle after write)
+	// Async completion: stay pending until configured delay elapsed
 	if (nrnw_state.state == CVC_PDA_OPERATION_PENDING)
 	{
+		if (!Pda_DelayElapsed(&nrnw_state))
+		{
+			return CVC_PDA_OPERATION_PENDING;
+		}
 		nrnw_state.state = CVC_PDA_OPERATION_SUCCEED;
 		nrnw_state.fail_count = 0;
+		nrnw_state.armed_op = PDA_ARM_NONE;
 		return CVC_PDA_OPERATION_SUCCEED;
 	}
 
@@ -727,77 +770,9 @@ CVC_APP_PDA_STATE_t API_GetNRNWStatus(unsigned char iMedia)
 	return ret;
 }
 
-CVC_APP_PDA_STATE_t API_WriteARNWData(void* ipSource, uint16_t iSize, unsigned char iMedia)
-{
-	// Validate media parameter (must be 1 for ARNW - Dataplug and NVRAM)
-	//if (iMedia != 1)
-	//{
-	//	printf("API_WriteARNWData: invalid media value %d, must be 1\n", iMedia);
-	//	return CVC_PDA_OPERATION_FAILED;
-	//}
-
-	// Validate parameters
-	if (ipSource == NULL)
-	{
-		printf("API_WriteARNWData: invalid source pointer\n");
-		return CVC_PDA_OPERATION_FAILED;
-	}
-
-	// Check size limit (max 1KB)
-	if (iSize > PDA_CONFIG_MAX_DATAPLUG_SIZE)
-	{
-		printf("API_WriteARNWData: iSize %d exceeds max %d\n", iSize, PDA_CONFIG_MAX_DATAPLUG_SIZE);
-		return CVC_PDA_OPERATION_FAILED;
-	}
-
-	// Check if operation is in progress
-	if (araw_state.state == CVC_PDA_OPERATION_PENDING)
-	{
-		return CVC_PDA_OPERATION_PENDING;
-	}
-
-	// Open file
-	FILE* fp = fopen(g_pda_storage_config.araw.file, "wb");
-	if (fp == NULL)
-	{
-		printf("API_WriteARNWData: failed to open file %s\n", g_pda_storage_config.araw.file);
-		araw_state.fail_count++;
-		if (araw_state.fail_count >= 3)
-		{
-			return CVC_PDA_NO_AVAILABLE;
-		}
-		return CVC_PDA_OPERATION_FAILED;
-	}
-
-	// Write data
-	size_t writtenSize = fwrite(ipSource, 1, iSize, fp);
-	fclose(fp);
-
-	if (writtenSize != iSize)
-	{
-		printf("API_WriteARNWData: write error, expected %d, got %zu\n", iSize, writtenSize);
-		araw_state.fail_count++;
-		if (araw_state.fail_count >= 3)
-		{
-			return CVC_PDA_NO_AVAILABLE;
-		}
-		return CVC_PDA_OPERATION_FAILED;
-	}
-
-	// Set state to pending, will be checked by GetARNWStatus
-	araw_state.state = CVC_PDA_OPERATION_PENDING;
-	return CVC_PDA_OPERATION_PENDING;
-}
-
+// pda 2 read
 CVC_APP_PDA_STATE_t API_ReadARAWData(unsigned char* opData, uint16_t iSize, uint16_t* opActualSize, unsigned char iMedia)
 {
-	// Validate media parameter (must be 2 for ARAW - Dataplug and NVRAM)
-	if (iMedia != 2)
-	{
-		printf("API_ReadARAWData: invalid media value %d, must be 2\n", iMedia);
-		return CVC_PDA_OPERATION_FAILED;
-	}
-
 	// Validate parameters
 	if (opData == NULL || opActualSize == NULL)
 	{
@@ -812,14 +787,19 @@ CVC_APP_PDA_STATE_t API_ReadARAWData(unsigned char* opData, uint16_t iSize, uint
 		return CVC_PDA_OPERATION_FAILED;
 	}
 
-	// Simulate async read operation (2 cycles)
-	// static int read_delay = 0;
-	// if (read_delay < 2)
-	// {
-	// 	read_delay++;
-	// 	return CVC_PDA_OPERATION_PENDING;
-	// }
-	// read_delay = 0;
+	/* delayed read poll: succeed once read_ms elapsed (buffer filled at arm time) */
+	if (g_pda_storage_config.araw.read_ms > 0U &&
+		araw_state.state == CVC_PDA_OPERATION_PENDING &&
+		araw_state.armed_op == PDA_ARM_READ)
+	{
+		if (!Pda_DelayElapsed(&araw_state))
+		{
+			return CVC_PDA_OPERATION_PENDING;
+		}
+		araw_state.state = CVC_PDA_OPERATION_SUCCEED;
+		araw_state.armed_op = PDA_ARM_NONE;
+		return CVC_PDA_OPERATION_SUCCEED;
+	}
 
 	// Open file
 	FILE* fp = fopen(g_pda_storage_config.araw.file, "rb");
@@ -868,122 +848,20 @@ CVC_APP_PDA_STATE_t API_ReadARAWData(unsigned char* opData, uint16_t iSize, uint
 	}
 
 	*opActualSize = (uint16_t)bytesRead;
-	araw_state.state = CVC_PDA_OPERATION_SUCCEED;
 	araw_state.fail_count = 0;
-	return CVC_PDA_OPERATION_SUCCEED;
-}
-
-CVC_APP_PDA_STATE_t API_ReadARNWData(unsigned char* opData, uint16_t iSize, uint16_t* opActualSize, unsigned char iMedia)
-{
-	// Validate media parameter (must be 3 for ARNW - NVRAM, fourth type)
-	if (iMedia != 3)
+	if (g_pda_storage_config.araw.read_ms > 0U)
 	{
-		printf("API_ReadARNWData: invalid media value %d, must be 3\n", iMedia);
-		return CVC_PDA_OPERATION_FAILED;
-	}
-
-	// Validate parameters
-	if (opData == NULL || opActualSize == NULL)
-	{
-		printf("API_ReadARNWData: invalid parameters\n");
-		return CVC_PDA_OPERATION_FAILED;
-	}
-
-	// Check size limit (max 1KB per core)
-	if (iSize > PDA_CONFIG_MAX_NVRAM_SIZE)
-	{
-		printf("API_ReadARNWData: iSize %d exceeds max %d\n", iSize, PDA_CONFIG_MAX_NVRAM_SIZE);
-		return CVC_PDA_OPERATION_FAILED;
-	}
-
-	// Simulate async read operation (2 cycles)
-	// static int read_delay = 0;
-	// if (read_delay < 2)
-	// {
-	// 	read_delay++;
-	// 	return CVC_PDA_OPERATION_PENDING;
-	// }
-	// read_delay = 0;
-
-	// Open file
-	FILE* fp = fopen(g_pda_storage_config.arnw.file, "rb");
-	if (fp == NULL)
-	{
-		printf("API_ReadARNWData: failed to open file %s\n", g_pda_storage_config.arnw.file);
-		arnw_state.fail_count++;
-		if (arnw_state.fail_count >= 3)
-		{
-			return CVC_PDA_NO_AVAILABLE;
-		}
-		return CVC_PDA_OPERATION_FAILED;
-	}
-
-	// Get file size
-	fseek(fp, 0, SEEK_END);
-	long fileSize = ftell(fp);
-	fseek(fp, 0, SEEK_SET);
-
-	// Check if buffer is large enough
-	if (fileSize > iSize)
-	{
-		printf("API_ReadARNWData: file size %ld exceeds buffer size %d\n", fileSize, iSize);
-		fclose(fp);
-		arnw_state.fail_count++;
-		if (arnw_state.fail_count >= 3)
-		{
-			return CVC_PDA_NO_AVAILABLE;
-		}
-		return CVC_PDA_OPERATION_FAILED;
-	}
-
-	// Read file
-	size_t bytesRead = fread(opData, 1, fileSize, fp);
-	fclose(fp);
-
-	if (bytesRead != fileSize)
-	{
-		printf("API_ReadARNWData: read error, expected %ld, got %zu\n", fileSize, bytesRead);
-		arnw_state.fail_count++;
-		if (arnw_state.fail_count >= 3)
-		{
-			return CVC_PDA_NO_AVAILABLE;
-		}
-		return CVC_PDA_OPERATION_FAILED;
-	}
-
-	*opActualSize = (uint16_t)bytesRead;
-	arnw_state.state = CVC_PDA_OPERATION_SUCCEED;
-	arnw_state.fail_count = 0;
-	return CVC_PDA_OPERATION_SUCCEED;
-}
-
-CVC_APP_PDA_STATE_t API_GetARNWStatus(unsigned char iMedia)
-{
-	// Validate media parameter (must be 3 for ARNW - NVRAM, fourth type)
-	if (iMedia != 3)
-	{
-		printf("API_GetARNWStatus: invalid media value %d, must be 3\n", iMedia);
-		return CVC_PDA_OPERATION_FAILED;
-	}
-
-	// Return current state (fourth type is read-only, no write operations)
-	CVC_APP_PDA_STATE_t ret = arnw_state.state;
-	arnw_state.state = CVC_PDA_NO_OPERATION;
-	return ret;
-}
-
-CVC_APP_PDA_STATE_t API_ReadPDAMass(INT8U iFileIndex, INT8U* opBufferAddress, INT32U* opLength)
-{
-	/* Each read will take 5 cycles */
-	static int read_delay_cnt[2] = { 0 };
-	if (read_delay_cnt[iFileIndex] < 5)
-	{
-		read_delay_cnt[iFileIndex]++;
+		Pda_ArmPending(&araw_state, g_pda_storage_config.araw.read_ms, PDA_ARM_READ);
 		return CVC_PDA_OPERATION_PENDING;
 	}
+	araw_state.state = CVC_PDA_OPERATION_SUCCEED;
+	araw_state.armed_op = PDA_ARM_NONE;
+	return CVC_PDA_OPERATION_SUCCEED;
+}
 
-	read_delay_cnt[iFileIndex] = 0;
-
+// pda 3 read
+CVC_APP_PDA_STATE_t API_ReadPDAMass(INT8U iFileIndex, INT8U* opBufferAddress, INT32U* opLength)
+{
 	if (opBufferAddress == NULL || opLength == NULL) {
 		printf("Invalid buffer or length pointer.\n");
 		// Only Write operation will affect pda_state, call API_ReadPDAMass directly to get read state
@@ -995,6 +873,16 @@ CVC_APP_PDA_STATE_t API_ReadPDAMass(INT8U iFileIndex, INT8U* opBufferAddress, IN
 		printf("Invalid Flash ID [%d]. It should be smaller than [%d].\n", iFileIndex, MAX_MASS_FLASH_NUM);
 		//SetPdaState(iFileIndex, CVC_PDA_OPERATION_FAILED);
 		return CVC_PDA_OPERATION_FAILED;
+	}
+
+	/* delayed read poll: succeed once read_ms elapsed (buffer filled at arm time) */
+	const uint32_t readDelayMs = getFlashDelayMs(iFileIndex, 0);
+	if (readDelayMs > 0U && pda_3_read_done_at[iFileIndex] != 0U) {
+		if (Pda_NowMs() < pda_3_read_done_at[iFileIndex]) {
+			return CVC_PDA_OPERATION_PENDING;
+		}
+		pda_3_read_done_at[iFileIndex] = 0U;
+		return CVC_PDA_OPERATION_SUCCEED;
 	}
 
 	const char* FlashFileName = getFlashFileName(iFileIndex);
@@ -1050,19 +938,19 @@ CVC_APP_PDA_STATE_t API_ReadPDAMass(INT8U iFileIndex, INT8U* opBufferAddress, IN
 	free(mapBuffer);
 	fclose(fp);
 
+	if (readDelayMs > 0U)
+	{
+		pda_3_read_done_at[iFileIndex] = Pda_NowMs() + (uint64_t)readDelayMs;
+		return CVC_PDA_OPERATION_PENDING;
+	}
+
 	// Update the state to successful operation
 	//SetPdaState(iFileIndex, CVC_PDA_OPERATION_SUCCEED);
 	return CVC_PDA_OPERATION_SUCCEED;
 }
 
-int32_t API_Printf(const char* context, int32_t arg1, int32_t arg2, int32_t arg3, int32_t arg4, int32_t arg5, int32_t arg6)
-{
-#ifdef API_PRINTF_IS_PRINTF
-	printf(context, arg1, arg2, arg3, arg4, arg5, arg6);
-#endif
-	return 0;
-}
 
+// pda 3 write
 CVC_APP_PDA_STATE_t API_WritePDAMass(INT8U iFileIndex, INT8U* ipBufferAddress, INT32U iLength, INT32U iLineID)
 {
 
@@ -1102,6 +990,14 @@ CVC_APP_PDA_STATE_t API_WritePDAMass(INT8U iFileIndex, INT8U* ipBufferAddress, I
 	}
 
 	fclose(file);
+
+	const uint32_t writeDelayMs = getFlashDelayMs(iFileIndex, 1);
+	if (writeDelayMs > 0U) {
+		pda_3_write_done_at[iFileIndex] = Pda_NowMs() + (uint64_t)writeDelayMs;
+		SetPdaState(iFileIndex, CVC_PDA_OPERATION_PENDING);
+		return CVC_PDA_OPERATION_PENDING;
+	}
+
 	SetPdaState(iFileIndex, CVC_PDA_OPERATION_SUCCEED);
 	return CVC_PDA_OPERATION_SUCCEED;
 
@@ -1109,21 +1005,211 @@ CVC_APP_PDA_STATE_t API_WritePDAMass(INT8U iFileIndex, INT8U* ipBufferAddress, I
 
 
 
+// pda 3 status
 CVC_APP_PDA_STATE_t API_GetPDAMassStatus(INT8U iFileIndex)
 {
 	CVC_APP_PDA_STATE_t retState = CVC_PDA_NO_AVAILABLE;
 	if (iFileIndex < MAX_MASS_FLASH_NUM) {
 		retState = pda_3_states[iFileIndex];
+		if (retState == CVC_PDA_OPERATION_PENDING && pda_3_write_done_at[iFileIndex] != 0U) {
+			if (Pda_NowMs() < pda_3_write_done_at[iFileIndex]) {
+				return CVC_PDA_OPERATION_PENDING;
+			}
+			pda_3_write_done_at[iFileIndex] = 0U;
+			SetPdaState(iFileIndex, CVC_PDA_OPERATION_SUCCEED);
+			return CVC_PDA_OPERATION_SUCCEED;
+		}
 	}
 	return retState;
 }
 
 
 
+// pda 3 line id
 void API_ReadPDAMassLineID(INT32U* opLineID)
 {
 
 	CVC_ReadPDAMassLineID(opLineID);
+}
+
+// pda 4 read
+CVC_APP_PDA_STATE_t API_ReadARNWData(unsigned char* opData, uint16_t iSize, uint16_t* opActualSize, unsigned char iMedia)
+{
+	// Validate parameters
+	if (opData == NULL || opActualSize == NULL)
+	{
+		printf("API_ReadARNWData: invalid parameters\n");
+		return CVC_PDA_OPERATION_FAILED;
+	}
+
+	// Check size limit (max 1KB per core)
+	if (iSize > PDA_CONFIG_MAX_NVRAM_SIZE)
+	{
+		printf("API_ReadARNWData: iSize %d exceeds max %d\n", iSize, PDA_CONFIG_MAX_NVRAM_SIZE);
+		return CVC_PDA_OPERATION_FAILED;
+	}
+
+	/* delayed read poll: succeed once read_ms elapsed (buffer filled at arm time) */
+	if (g_pda_storage_config.arnw.read_ms > 0U &&
+		arnw_state.state == CVC_PDA_OPERATION_PENDING &&
+		arnw_state.armed_op == PDA_ARM_READ)
+	{
+		if (!Pda_DelayElapsed(&arnw_state))
+		{
+			return CVC_PDA_OPERATION_PENDING;
+		}
+		arnw_state.state = CVC_PDA_OPERATION_SUCCEED;
+		arnw_state.armed_op = PDA_ARM_NONE;
+		return CVC_PDA_OPERATION_SUCCEED;
+	}
+
+	// Open file
+	FILE* fp = fopen(g_pda_storage_config.arnw.file, "rb");
+	if (fp == NULL)
+	{
+		printf("API_ReadARNWData: failed to open file %s\n", g_pda_storage_config.arnw.file);
+		arnw_state.fail_count++;
+		if (arnw_state.fail_count >= 3)
+		{
+			return CVC_PDA_NO_AVAILABLE;
+		}
+		return CVC_PDA_OPERATION_FAILED;
+	}
+
+	// Get file size
+	fseek(fp, 0, SEEK_END);
+	long fileSize = ftell(fp);
+	fseek(fp, 0, SEEK_SET);
+
+	// Check if buffer is large enough
+	if (fileSize > iSize)
+	{
+		printf("API_ReadARNWData: file size %ld exceeds buffer size %d\n", fileSize, iSize);
+		fclose(fp);
+		arnw_state.fail_count++;
+		if (arnw_state.fail_count >= 3)
+		{
+			return CVC_PDA_NO_AVAILABLE;
+		}
+		return CVC_PDA_OPERATION_FAILED;
+	}
+
+	// Read file
+	size_t bytesRead = fread(opData, 1, fileSize, fp);
+	fclose(fp);
+
+	if (bytesRead != fileSize)
+	{
+		printf("API_ReadARNWData: read error, expected %ld, got %zu\n", fileSize, bytesRead);
+		arnw_state.fail_count++;
+		if (arnw_state.fail_count >= 3)
+		{
+			return CVC_PDA_NO_AVAILABLE;
+		}
+		return CVC_PDA_OPERATION_FAILED;
+	}
+
+	*opActualSize = (uint16_t)bytesRead;
+	arnw_state.fail_count = 0;
+	if (g_pda_storage_config.arnw.read_ms > 0U)
+	{
+		Pda_ArmPending(&arnw_state, g_pda_storage_config.arnw.read_ms, PDA_ARM_READ);
+		return CVC_PDA_OPERATION_PENDING;
+	}
+	arnw_state.state = CVC_PDA_OPERATION_SUCCEED;
+	arnw_state.armed_op = PDA_ARM_NONE;
+	return CVC_PDA_OPERATION_SUCCEED;
+}
+
+// pda 4 write (dataplug file)
+CVC_APP_PDA_STATE_t API_WriteARNWData(void* ipSource, uint16_t iSize, unsigned char iMedia)
+{
+	// Validate parameters
+	if (ipSource == NULL)
+	{
+		printf("API_WriteARNWData: invalid source pointer\n");
+		return CVC_PDA_OPERATION_FAILED;
+	}
+
+	// Check size limit (max 1KB)
+	if (iSize > PDA_CONFIG_MAX_DATAPLUG_SIZE)
+	{
+		printf("API_WriteARNWData: iSize %d exceeds max %d\n", iSize, PDA_CONFIG_MAX_DATAPLUG_SIZE);
+		return CVC_PDA_OPERATION_FAILED;
+	}
+
+	// Check if operation is in progress
+	if (araw_state.state == CVC_PDA_OPERATION_PENDING)
+	{
+		return CVC_PDA_OPERATION_PENDING;
+	}
+
+	// Open file
+	FILE* fp = fopen(g_pda_storage_config.araw.file, "wb");
+	if (fp == NULL)
+	{
+		printf("API_WriteARNWData: failed to open file %s\n", g_pda_storage_config.araw.file);
+		araw_state.fail_count++;
+		if (araw_state.fail_count >= 3)
+		{
+			return CVC_PDA_NO_AVAILABLE;
+		}
+		return CVC_PDA_OPERATION_FAILED;
+	}
+
+	// Write data
+	size_t writtenSize = fwrite(ipSource, 1, iSize, fp);
+	fclose(fp);
+
+	if (writtenSize != iSize)
+	{
+		printf("API_WriteARNWData: write error, expected %d, got %zu\n", iSize, writtenSize);
+		araw_state.fail_count++;
+		if (araw_state.fail_count >= 3)
+		{
+			return CVC_PDA_NO_AVAILABLE;
+		}
+		return CVC_PDA_OPERATION_FAILED;
+	}
+
+	// Set state to pending, will be checked by GetARNWStatus
+	araw_state.state = CVC_PDA_OPERATION_PENDING;
+	araw_state.armed_op = PDA_ARM_WRITE;
+	if (g_pda_storage_config.arnw.write_ms > 0U)
+	{
+		/* let GetARNWStatus report this write pending until write_ms elapsed */
+		Pda_ArmPending(&arnw_state, g_pda_storage_config.arnw.write_ms, PDA_ARM_WRITE);
+	}
+	return CVC_PDA_OPERATION_PENDING;
+}
+
+// pda 4 status
+CVC_APP_PDA_STATE_t API_GetARNWStatus(unsigned char iMedia)
+{
+	// Async completion: stay pending until configured delay elapsed
+	if (arnw_state.state == CVC_PDA_OPERATION_PENDING)
+	{
+		if (!Pda_DelayElapsed(&arnw_state))
+		{
+			return CVC_PDA_OPERATION_PENDING;
+		}
+		arnw_state.armed_op = PDA_ARM_NONE;
+		arnw_state.state = CVC_PDA_NO_OPERATION;
+		return CVC_PDA_OPERATION_SUCCEED;
+	}
+
+	// Return current state (fourth type is read-only, no write operations)
+	CVC_APP_PDA_STATE_t ret = arnw_state.state;
+	arnw_state.state = CVC_PDA_NO_OPERATION;
+	return ret;
+}
+
+int32_t API_Printf(const char* context, int32_t arg1, int32_t arg2, int32_t arg3, int32_t arg4, int32_t arg5, int32_t arg6)
+{
+#ifdef API_PRINTF_IS_PRINTF
+	printf(context, arg1, arg2, arg3, arg4, arg5, arg6);
+#endif
+	return 0;
 }
 
 static int shut_down_state = 0;

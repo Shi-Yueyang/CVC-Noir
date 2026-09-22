@@ -518,6 +518,21 @@ static void ParsePdaStorageConfig(const nlohmann::json& root_config)
 		return nullptr;
 	};
 
+	auto get_delay_ms = [&](const nlohmann::json& entry, const char* field, const char* ctx) -> uint32_t
+	{
+		if (!entry.contains(field))
+		{
+			return 0U;
+		}
+		const auto& v = entry[field];
+		if (!v.is_number_integer() || v.get<int64_t>() < 0)
+		{
+			log->warn("invalid %s for %s, defaulting to 0", field, ctx);
+			return 0U;
+		}
+		return static_cast<uint32_t>(v.get<int64_t>());
+	};
+
 	// Parse first type PDA data (new key: pda1, legacy key: nrnw)
 	if (const nlohmann::json* pda1_config = get_data_object("pda1", "nrnw"))
 	{
@@ -526,6 +541,8 @@ static void ParsePdaStorageConfig(const nlohmann::json& root_config)
 			std::string file = (*pda1_config)["file"].get<std::string>();
 			strcpy_s(g_pda_storage_config.nrnw.file, file.c_str());
 		}
+		g_pda_storage_config.nrnw.read_ms = get_delay_ms(*pda1_config, "read_ms", "pda1");
+		g_pda_storage_config.nrnw.write_ms = get_delay_ms(*pda1_config, "write_ms", "pda1");
 		check_file_exists(g_pda_storage_config.nrnw.file, "pda1/nrnw");
 	}
 
@@ -537,6 +554,8 @@ static void ParsePdaStorageConfig(const nlohmann::json& root_config)
 			std::string file = (*pda2_config)["file"].get<std::string>();
 			strcpy_s(g_pda_storage_config.araw.file, file.c_str());
 		}
+		g_pda_storage_config.araw.read_ms = get_delay_ms(*pda2_config, "read_ms", "pda2");
+		g_pda_storage_config.araw.write_ms = get_delay_ms(*pda2_config, "write_ms", "pda2");
 		check_file_exists(g_pda_storage_config.araw.file, "pda2/araw");
 	}
 
@@ -548,6 +567,8 @@ static void ParsePdaStorageConfig(const nlohmann::json& root_config)
 			std::string file = (*pda4_config)["file"].get<std::string>();
 			strcpy_s(g_pda_storage_config.arnw.file, file.c_str());
 		}
+		g_pda_storage_config.arnw.read_ms = get_delay_ms(*pda4_config, "read_ms", "pda4");
+		g_pda_storage_config.arnw.write_ms = get_delay_ms(*pda4_config, "write_ms", "pda4");
 		check_file_exists(g_pda_storage_config.arnw.file, "pda4/arnw");
 	}
 
@@ -583,6 +604,8 @@ static void ParsePdaStorageConfig(const nlohmann::json& root_config)
 				std::string file = flash_entry["file"].get<std::string>();
 				strcpy_s(g_pda_storage_config.flash[count].file, file.c_str());
 			}
+			g_pda_storage_config.flash[count].read_ms = get_delay_ms(flash_entry, "read_ms", "pda3");
+			g_pda_storage_config.flash[count].write_ms = get_delay_ms(flash_entry, "write_ms", "pda3");
 			check_file_exists(g_pda_storage_config.flash[count].file, "pda3/flash");
 			count++;
 		}
@@ -594,6 +617,20 @@ static void ParsePdaStorageConfig(const nlohmann::json& root_config)
 		g_pda_storage_config.araw.file, 
 		g_pda_storage_config.flash_count,
 		g_pda_storage_config.arnw.file);
+	log->info("pda delay_ms: pda1 r=%u w=%u, pda2 r=%u w=%u, pda4 r=%u w=%u",
+		g_pda_storage_config.nrnw.read_ms,
+		g_pda_storage_config.nrnw.write_ms,
+		g_pda_storage_config.araw.read_ms,
+		g_pda_storage_config.araw.write_ms,
+		g_pda_storage_config.arnw.read_ms,
+		g_pda_storage_config.arnw.write_ms);
+	for (uint8_t i = 0; i < g_pda_storage_config.flash_count; i++)
+	{
+		log->info("pda delay_ms: pda3[%d] r=%u w=%u",
+			g_pda_storage_config.flash[i].id,
+			g_pda_storage_config.flash[i].read_ms,
+			g_pda_storage_config.flash[i].write_ms);
+	}
 }
 
 static void Asw_Init(void)

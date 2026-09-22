@@ -101,12 +101,16 @@ extern BoardStatus_Config_t g_board_status_config;
 typedef struct _PDA_SingleFileConfig_t
 {
     char file[256];
+    unsigned int read_ms;   /* simulated read delay, 0 = immediate */
+    unsigned int write_ms;  /* simulated write delay, 0 = immediate */
 } PDA_SingleFileConfig_t;
 
 typedef struct _PDA_FlashFileConfig_t
 {
     INT8U id;
     char file[256];
+    unsigned int read_ms;   /* simulated read delay, 0 = immediate */
+    unsigned int write_ms;  /* simulated write delay, 0 = immediate */
 } PDA_FlashFileConfig_t;
 
 typedef struct _PDA_StorageConfig_t

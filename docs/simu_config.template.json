@@ -228,7 +228,9 @@
             "version_pad": [0, 1, 2, 3, 0, 3, 2, 1]
         },
         "nrnw": {
-            "file": "data/nvram.bin"
+            "file": "data/nvram.bin",
+            "read_ms": 0,
+            "write_ms": 0
         },
         "araw": {
             "file": "data/dataplug.bin"

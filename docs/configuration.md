@@ -381,20 +381,29 @@ Configures application data arrays and the paths for the Personal Digital Assist
 - `araw`: Dataplug storage (2nd type PDA data: single read/write, double read/write).
 - `arnw`: NVRAM storage (4th type PDA data: single read-only, double read/write).
 - `flash`: Flash storage (3rd type PDA data). An array supporting up to 7 entries (`id` 0-6).
+- **Simulated operation delays (`read_ms` / `write_ms`)**: Each PDA entry (`nrnw`/`araw`/`arnw`, and every `flash` array entry) accepts optional `read_ms` and `write_ms` fields — the simulated duration in milliseconds for read/write operations on that storage. The new key aliases `pda1`/`pda2`/`pda3`/`pda4` are accepted in place of `nrnw`/`araw`/`arnw`/`flash` and carry the same fields.
+  - Default is `0` (operation completes immediately, matching legacy behavior). Missing section, missing entry, or missing field all mean `0`.
+  - Invalid values (non-integer, negative) are ignored with a warning and default to `0`.
+  - With a delay configured, the read/write API performs its file operation immediately but returns `PENDING`; `API_GetXXXStatus()` (and for types without a status poll, a repeat call of the read API) keeps returning `PENDING` until the configured milliseconds have elapsed (monotonic wall clock, independent of `cycle_ms`), then reports `SUCCEED`.
+  - `application_data` is startup-only data and has no delays.
+  - 4th type writes go to the dataplug file but use `arnw`/`pda4`'s `write_ms`.
 ```json
 "data": {
     "nrnw": {
-        "file": "Plug/nvram.bin"
+        "file": "Plug/nvram.bin",
+        "read_ms": 400,
+        "write_ms": 200
     },
     "araw": {
         "file": "Plug/dataplug.bin"
     },
     "arnw": {
-        "file": "Plug/arnw.bin"
+        "file": "Plug/arnw.bin",
+        "read_ms": 400
     },
     "flash": [
-        { "id": 0, "file": "Plug/db.dat" },
-        { "id": 1, "file": "Plug/db2.dat" }
+        { "id": 0, "file": "Plug/db.dat", "read_ms": 1000, "write_ms": 1500 },
+        { "id": 1, "file": "Plug/db2.dat", "read_ms": 1000, "write_ms": 1500 }
     ]
 }
 ```

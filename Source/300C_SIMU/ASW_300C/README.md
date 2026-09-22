@@ -33,6 +33,14 @@ PDA (Persistent Data Area) provides persistent storage for application data acro
 #define CVC_PDA_NO_AVAILABLE        4U  // Three consecutive failures
 ```
 
+## Simulated Operation Delays
+
+Read/write delays are configurable per PDA type via `read_ms`/`write_ms` fields in the
+matching `data` entries of `simu_config.json` (see `docs/configuration.md` §6).
+Default is `0` (immediate completion). With a delay set, the file operation is performed
+immediately but the API returns `PENDING`; completion is reported after the configured
+milliseconds elapse, via `API_GetXXXStatus()` or by repeating the read call (types 2/3).
+
 ## Data Structures
 
 ### Message Header
