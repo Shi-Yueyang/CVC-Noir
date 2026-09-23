@@ -166,6 +166,8 @@ if(BUILD_TESTS)
 	add_executable(test_a_train_session
 		"tests/test_a_train_session.cpp"
 		"Source/300C_SIMU/BSW_CODE/session/a_train_session.cpp"
+		"Source/300C_SIMU/BSW_CODE/session/sdmu_packet.cpp"
+		"Source/300C_SIMU/BSW_CODE/session/session_crc.cpp"
 		"Source/300C_SIMU/BSW_CODE/Pub_Comm/connection_factory.cpp"
 		"Source/300C_SIMU/BSW_CODE/Pub_Comm/dummy_connection.cpp"
 		"Source/300C_SIMU/BSW_CODE/Pub_Comm/serial_connection.cpp"

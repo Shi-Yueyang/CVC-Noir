@@ -225,15 +225,24 @@ Used for safety-critical connections like RBC and TSRS. Supports advanced timing
 Used to control internal software messaging behavior (e.g., between ATP and ATO). They typically use the standard `name`, `id`, and `is_skip` properties without requiring a `connection` block.
 
 #### `a_train_session`
-Single-instance (not an array) category for A-train related links, like `pxi_session`. The section is optional; entries use the `name` property and an optional `connection` block (any connection type). There is no `id` field. Each cycle the session drains the connection (received content is discarded, logged at trace level under module `a_train`) and drains pending VOB output messages. Each VOB message is sent as one NDJSON `atp_command` line. The temporary hardcoded identity is `train_id: "TRAIN001"`, `cab_id: 1`; `atp_signal` contains one bit per VOB port index, with missing indices set to `0`, and an underscore is inserted after every five bits.
+Single-instance (not an array) category for A-train related links, like `pxi_session`. The section is optional; entries use the `name` property, optional `signal_type` and `cab` properties, and an optional `connection` block (any connection type). There is no `id` field.
+- **Special Keys:**
+  - `signal_type`: (Optional) Prefix string used to select the targeted entry in the received `train_state` snapshot's `equipment[]` array (each entry carries a `type`/`cab_id`/`state` triple, e.g. `type: "stcs_atp_solo"`). An entry is a candidate when its `type` starts with `signal_type`. Defaults to empty; must be a string, other types are ignored with the default retained. An empty/missing `signal_type` disables train_out_signal extraction without warnings.
+  - `cab`: (Optional) Integer. When non-zero, candidates from the `signal_type` prefix match are further filtered to entries whose `cab_id` equals this value. When missing or `0`, cab filtering is disabled. The first entry passing both filters is used. A non-integer value is ignored and the default `0` is retained.
+  - `take_motion`: (Optional) Boolean. When `true`, the session additionally reads the train motion data (`position`, `speed`, `acceleration`, meters-based units per the A-train ATP protocol) from each `train_state` line, converts it to mm / mm/s / mm/s², assembles the secure (type `0x33`) and accurate (type `0x39`) sdmu packets (same format as `pxi_motion_session`, shared `sdmu_packet` module), and forwards them to the domain logic via `write_asw_message` (src id `ATP_SDLU_IN_ATP_SESSION_ID`, `CVC_BSW_ASW_COM_RX_TYPE`), latest snapshot per cycle. When `false` or missing, motion data is ignored. A non-boolean value is ignored and the default `false` is retained.
+Each cycle the session drains the connection (each received line is logged at trace level under module `a_train` and processed) and drains pending VOB output messages.
+- **Input handling (`train_state`):** for each received line, the session looks for a JSON object with `"type": "train_state"`, scans its `equipment` array for the first entry whose `type` starts with the configured `signal_type` and (when `cab` is non-zero) whose `cab_id` equals the configured `cab`, and reads that entry's `state.train_out_signal`. The signal must be a non-empty string of `"0"`/`"1"` characters (max `MAX_IOPORT_NUM` bits); the leftmost character maps to `PortIndex` 0 with `PortValue` equal to the bit. The latest valid mapping found in the cycle is published once via `CVC_BSW_ITF_Write(CVC_BSW_VIB_RX_TYPE, ...)` (same pattern as the PXI `publish_vib_input`). When a `train_state` line carries an `equipment` array but no entry passes the `signal_type`/`cab` filters, a `warn`-level log is emitted naming the expected prefix (and cab, when filtered) and listing up to 8 equipment entries seen in the snapshot as `type:cab_id`. Other rejected lines (invalid JSON, other types, malformed signal) are ignored beyond the trace log. An empty/missing `signal_type` disables extraction without warnings. Motion extraction (`take_motion`) reads root-level `position`/`speed`/`acceleration`; the `direction` flag comes from the optional root `direction` string field (`"forward"` or `"rearward"`), falling back to the speed sign when the field is missing or not recognized.
+- **Output:** each VOB message is sent as one NDJSON `atp_command` line. The temporary hardcoded identity is `cab_id: 1`; `atp_signal` contains one bit per VOB port index, with missing indices set to `0`, and an underscore is inserted after every five bits.
 ```
-{"type":"atp_command","train_id":"TRAIN001","cab_id":1,"atp_signal":"0100..."}\n
+{"type":"atp_command","cab_id":1,"atp_signal":"0100..."}\n
 ```
 
 *Example:*
 ```json
 "a_train_session": {
     "name": "a-train",
+    "signal_type": "stcs_atp",
+    "cab": 1,
     "connection": {
         "type": "tcp_server",
         "local_ip": "127.0.0.1",
