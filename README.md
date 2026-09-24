@@ -14,7 +14,7 @@ Requires **CMake 3.16+** and a C++17 compiler (GCC 11+, Clang 14+, or MSVC 2022)
 
 ### Domain logic setup
 
-Place your domain logic folder under `Source/`. CMake auto-detects `ATP_CODE`, `ATO_CODE`, or `application`:
+Place your domain logic folder under `Source/`. CMake auto-detects `ATP_CODE`, `ATO_CODE`, or `application`; the standalone `Sandbox` template is the fallback:
 
 ```bash
 cmake -B build -DCMAKE_BUILD_TYPE=Debug

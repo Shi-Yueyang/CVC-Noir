@@ -60,6 +60,11 @@ skills/venv/
 **/ATP_CODE/
 **/ATO_CODE/
 **/application/
+!Source/Sandbox/
+Source/Sandbox/*
+!Source/Sandbox/sandbox_domain.c
+!Source/Sandbox/sandbox_domain.h
+!Source/Sandbox/README.md
 
 # Runtime config (user-specific)
 simu_config.json

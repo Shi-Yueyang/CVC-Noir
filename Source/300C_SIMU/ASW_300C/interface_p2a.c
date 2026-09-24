@@ -10,7 +10,6 @@ extern void SRV_ShutdownActiveCycle(void);
 #include "board_status.h"
 #include "errorProc.h"
 #include "conf.h"
-#include "../../ATP_CODE/UTILITIES/log.h"
 
 #define SHUTDOWN_MSG_STARTR50      0u
 
@@ -1217,7 +1216,7 @@ static int shut_down_state = 0;
 CVC_T_Status API_SetShutdown(INT16U iCode)
 {
 	SRV_ShutdownActiveCycle();
-	Evc_platform_print(LOG_ERROR, "EVC exit reason : %d\n", iCode);
+	printf("EVC exit reason : %d\n", (int)iCode);
 	storeFatalError(iCode, 0u);
 	shut_down_state = 1;
 	return CVC_C_NO_ERROR;

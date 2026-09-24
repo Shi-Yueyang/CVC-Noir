@@ -23,7 +23,7 @@ file(GLOB_RECURSE SIMU_SOURCES
 # Auto-detects common folder names if not set
 set(DOMAIN_CODE_DIR "" CACHE STRING "Path to domain logic folder (relative to source dir)")
 if(NOT DOMAIN_CODE_DIR)
-    foreach(_candidate ATP_CODE ATO_CODE application)
+    foreach(_candidate ATP_CODE ATO_CODE application Sandbox)
         if(IS_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/Source/${_candidate}")
             set(DOMAIN_CODE_DIR "Source/${_candidate}" CACHE STRING "" FORCE)
             message(STATUS "Auto-detected domain logic at: ${DOMAIN_CODE_DIR}")
@@ -196,6 +196,15 @@ if(BUILD_TESTS)
 		target_link_libraries(test_a_train_session PRIVATE pthread)
 	endif()
 	add_test(NAME test_a_train_session COMMAND test_a_train_session)
+
+    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/Source/Sandbox/sandbox_domain.c")
+        add_executable(test_sandbox_domain
+            "tests/test_sandbox_domain.c"
+            "Source/Sandbox/sandbox_domain.c"
+        )
+        target_include_directories(test_sandbox_domain PRIVATE "Source/Sandbox")
+        add_test(NAME test_sandbox_domain COMMAND test_sandbox_domain)
+    endif()
 endif()
 
 # ── IDE source grouping (optional, matches VS filters) ───────

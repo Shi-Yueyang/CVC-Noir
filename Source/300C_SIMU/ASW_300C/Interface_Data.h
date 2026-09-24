@@ -7,7 +7,7 @@ extern "C" {
 #include <math.h>
 #include "cvc_datatypes.h"
 #include "board_status.h"
-#include "../../ATP_CODE/cvc_300c_api_define.h"
+#include "simulator_api_types.h"
 #define ASW_ATP
 #define MAX_BSWMSG_SIZE				   2500U  
 #define MAX_BSWBUF_SIZE				   2600U 
