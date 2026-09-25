@@ -125,6 +125,7 @@ typedef struct _PDA_StorageConfig_t
 extern PDA_StorageConfig_t g_pda_storage_config;
 
 BOOLEAN writePFMsg(INT8U msgID, INT8U appType, INT32U ctcsID, INT8U* buff, INT16U buffSize);
+void CVC_SetIgnoreShutdown(int ignore_shutdown);
 int GetShutDownState();
 
 #ifdef __cplusplus

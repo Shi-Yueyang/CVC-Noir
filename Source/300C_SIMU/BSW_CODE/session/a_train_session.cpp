@@ -391,7 +391,8 @@ session_result a_train_session::do_output() noexcept
 		}
 
 		const std::string payload = a_train_atp_payload_line(vob_data);
-		get_a_train_log()->trace("a-train out: %s", payload.c_str());
+		const std::string log_payload = payload.substr(0U, payload.size() - 1U);
+		get_a_train_log()->trace("a-train out: %s", log_payload.c_str());
 		const connection_result send_result = connection_->send(
 			reinterpret_cast<const unsigned char*>(payload.data()), payload.size());
 		if (send_result != connection_result::ok)

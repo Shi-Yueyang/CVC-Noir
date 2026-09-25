@@ -1,5 +1,6 @@
 {
     "cycle_ms": 200,
+    "ignore_shutdown": false,
     "launcher": [
         {
             "enabled": true,

@@ -7,6 +7,7 @@ The `simu_config.json` file is the central configuration file for the cvc-noir s
   ```json
   "cycle_ms": 200
   ```
+- `ignore_shutdown`: Optional boolean, defaults to `false`. When `true`, domain shutdown requests are ignored and logged once at debug level; the simulator continues running. OS-level shutdown events are unaffected.
 
 ### 2. Launcher (`launcher`)
 An array of external applications to start automatically when the simulator runs.

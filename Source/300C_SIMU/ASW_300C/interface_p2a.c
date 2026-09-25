@@ -10,6 +10,7 @@ extern void SRV_ShutdownActiveCycle(void);
 #include "board_status.h"
 #include "errorProc.h"
 #include "conf.h"
+#include "../logging/logger.h"
 
 #define SHUTDOWN_MSG_STARTR50      0u
 
@@ -1212,11 +1213,24 @@ int32_t API_Printf(const char* context, int32_t arg1, int32_t arg2, int32_t arg3
 }
 
 static int shut_down_state = 0;
+static int ignore_shutdown_requested = 0;
+
+void CVC_SetIgnoreShutdown(int ignore_shutdown)
+{
+	ignore_shutdown_requested = (ignore_shutdown != 0);
+}
 
 CVC_T_Status API_SetShutdown(INT16U iCode)
 {
 	SRV_ShutdownActiveCycle();
-	printf("EVC exit reason : %d\n", (int)iCode);
+	if (!ignore_shutdown_requested)
+	{
+		printf("exit reason : %d\n", (int)iCode);
+	}
+	else
+	{
+		log_debug("simulation", "shutdown ignored, reason = %u", (unsigned int)iCode);
+	}
 	storeFatalError(iCode, 0u);
 	shut_down_state = 1;
 	return CVC_C_NO_ERROR;

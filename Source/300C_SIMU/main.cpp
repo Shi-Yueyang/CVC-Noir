@@ -36,6 +36,17 @@ std::atomic<bool> g_shutdown_performed(false);
 
 void perform_application_shutdown();
 uint32_t load_main_loop_period_ms(const std::string& config_path);
+bool load_ignore_shutdown(const std::string& config_path);
+
+std::string format_digit_groups(const long long value)
+{
+	std::string formatted = std::to_string(value);
+	for (std::size_t position = formatted.size(); position > 3U; position -= 3U)
+	{
+		formatted.insert(position - 3U, 1U, '_');
+	}
+	return formatted;
+}
 
 #ifdef _WIN32
 BOOL WINAPI console_control_handler(DWORD control_type)
@@ -98,6 +109,8 @@ int main(int argc, char* argv[])
 		<< "\n";
 	AppContext ctx;
 	const uint32_t main_loop_period_ms = load_main_loop_period_ms(config_path);
+	const bool ignore_shutdown = load_ignore_shutdown(config_path);
+	CVC_SetIgnoreShutdown(ignore_shutdown ? 1 : 0);
 
 	long long kill_delay = 0;
 	const Logger::Ptr log = Logger::get("simulation");
@@ -146,6 +159,7 @@ int main(int argc, char* argv[])
 		} while (next_cycle_time <= current_time);
 #endif
 
+		const std::chrono::steady_clock::time_point cycle_start = std::chrono::steady_clock::now();
 		CVC_BSW_ITF_updateVSN();
 
 		SyncInput(&ctx);
@@ -155,10 +169,20 @@ int main(int argc, char* argv[])
 		SyncOutput(&ctx);
 
 		check_log_config_reload(config_path);
+		const long long cycle_elapsed_us = std::chrono::duration_cast<std::chrono::microseconds>(
+			std::chrono::steady_clock::now() - cycle_start).count();
+		log->trace("cycle elapsed: %s us", format_digit_groups(cycle_elapsed_us).c_str());
 
-		if (g_shutdown_performed || (GetShutDownState() >0 && (kill_delay++) > 5))
+		if (g_shutdown_performed)
 		{
 			break;
+		}
+		if (GetShutDownState() > 0 && !ignore_shutdown)
+		{
+			if ((kill_delay++) > 5)
+			{
+				break;
+			}
 		}
 
 	}
@@ -237,6 +261,32 @@ uint32_t load_main_loop_period_ms(const std::string& config_path)
 	}
 
 	return DEFAULT_MAIN_LOOP_PERIOD_MS;
+}
+
+bool load_ignore_shutdown(const std::string& config_path)
+{
+	std::ifstream json_file(config_path);
+	if (!json_file.is_open())
+	{
+		return false;
+	}
+
+	try
+	{
+		nlohmann::json root_config;
+		json_file >> root_config;
+		if (root_config.is_object()
+			&& root_config.contains("ignore_shutdown")
+			&& root_config["ignore_shutdown"].is_boolean())
+		{
+			return root_config["ignore_shutdown"].get<bool>();
+		}
+	}
+	catch (...)
+	{
+	}
+
+	return false;
 }
 
 void check_log_config_reload(const std::string& config_path)
