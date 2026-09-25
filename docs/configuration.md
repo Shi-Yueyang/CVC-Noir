@@ -39,6 +39,7 @@ Configures the logging system outputs (console, file) and log levels per module.
   - `level`: Minimum severity to log (`trace`, `debug`, `info`, `warn`, `error`, `critical`).
   - `flush_level`: Severity level that triggers immediate file flushing.
   - `pattern`: The formatting string for log lines.
+- Enabled file logs are created on the first message written to that file sink. Starting the simulator or acquiring a logger does not create an empty log file.
 - **`modules`**: Override logging configurations for specific software modules (e.g., `simulation`, `037_tsrs_1`).
 - **Hot reload**: The `log` section is reloaded at runtime when `simu_config.json` is modified (detected via file mtime polling once per cycle, after `SyncOutput`). On a valid edit the new logging config is applied live (console/file levels, patterns, per-module overrides, sink enable/disable) without restarting the simulator and without creating new log files for the current run. On a malformed edit a warning is logged with the parse error and the previous config is retained unchanged. If a valid edit cannot be applied (e.g. an unwritable log `directory`), a warning is logged with the failure reason and the previous config and loggers are rolled back intact, so logging continues on the old config; a subsequent valid edit reloads normally.
 ```json

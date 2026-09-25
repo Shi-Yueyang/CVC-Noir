@@ -603,6 +603,89 @@ log_level_t resolve_logger_level_locked(const std::string& name, const module_co
 	return minimum_enabled_level(config);
 }
 
+class lazy_rotating_file_sink final : public spdlog::sinks::sink
+{
+public:
+	lazy_rotating_file_sink(std::filesystem::path directory, std::filesystem::path file_path,
+		std::size_t max_file_size, std::size_t max_files)
+		: directory_(std::move(directory))
+		, file_path_(std::move(file_path))
+		, max_file_size_(max_file_size)
+		, max_files_(max_files)
+	{
+	}
+
+	void log(const spdlog::details::log_msg& msg) override
+	{
+		std::lock_guard<std::mutex> lock(mutex_);
+		if (!sink_)
+		{
+			initialize_sink();
+		}
+		sink_->log(msg);
+	}
+
+	void flush() override
+	{
+		std::lock_guard<std::mutex> lock(mutex_);
+		if (sink_)
+		{
+			sink_->flush();
+		}
+	}
+
+	void set_pattern(const std::string& pattern) override
+	{
+		std::lock_guard<std::mutex> lock(mutex_);
+		pattern_ = pattern;
+		pattern_set_ = true;
+		formatter_.reset();
+		if (sink_)
+		{
+			sink_->set_pattern(pattern);
+		}
+	}
+
+	void set_formatter(std::unique_ptr<spdlog::formatter> sink_formatter) override
+	{
+		std::lock_guard<std::mutex> lock(mutex_);
+		formatter_ = std::move(sink_formatter);
+		pattern_set_ = false;
+		if (sink_ && formatter_)
+		{
+			sink_->set_formatter(formatter_->clone());
+		}
+	}
+
+private:
+	void initialize_sink()
+	{
+		std::filesystem::create_directories(directory_);
+		std::shared_ptr<spdlog::sinks::rotating_file_sink_mt> file_sink =
+			std::make_shared<spdlog::sinks::rotating_file_sink_mt>(
+				file_path_.string(), max_file_size_, max_files_);
+		if (formatter_)
+		{
+			file_sink->set_formatter(formatter_->clone());
+		}
+		else if (pattern_set_)
+		{
+			file_sink->set_pattern(pattern_);
+		}
+		sink_ = std::move(file_sink);
+	}
+
+	std::filesystem::path directory_;
+	std::filesystem::path file_path_;
+	std::size_t max_file_size_;
+	std::size_t max_files_;
+	std::mutex mutex_;
+	std::shared_ptr<spdlog::sinks::rotating_file_sink_mt> sink_;
+	std::string pattern_;
+	std::unique_ptr<spdlog::formatter> formatter_;
+	bool pattern_set_ = false;
+};
+
 std::shared_ptr<spdlog::logger> create_logger_locked(const std::string& name)
 {
 	if (std::shared_ptr<spdlog::logger> existing_logger = spdlog::get(name))
@@ -625,12 +708,12 @@ std::shared_ptr<spdlog::logger> create_logger_locked(const std::string& name)
 	if (module.local_file.enabled)
 	{
 		const std::filesystem::path log_directory(module.local_file.directory);
-		std::filesystem::create_directories(log_directory);
 		const std::string file_name = log_state.run_file_prefix + "." + replace_module_token(module.local_file.file_name, name);
 		const std::filesystem::path log_file_path = log_directory / file_name;
-		std::shared_ptr<spdlog::sinks::rotating_file_sink_mt> file_sink =
-			std::make_shared<spdlog::sinks::rotating_file_sink_mt>(
-				log_file_path.string(),
+		std::shared_ptr<lazy_rotating_file_sink> file_sink =
+			std::make_shared<lazy_rotating_file_sink>(
+				log_directory,
+				log_file_path,
 				static_cast<std::size_t>(module.local_file.max_file_size_bytes),
 				static_cast<std::size_t>(module.local_file.max_files));
 		file_sink->set_level(to_spdlog_level(module.local_file.level));

@@ -163,6 +163,22 @@ if(BUILD_TESTS)
 	endif()
 	add_test(NAME test_tcp_framing COMMAND test_tcp_framing)
 
+    add_executable(test_logger_lazy_file
+        "tests/test_logger_lazy_file.cpp"
+        "Source/300C_SIMU/logging/logger.cpp"
+    )
+    target_include_directories(test_logger_lazy_file PRIVATE
+        "Source/300C_SIMU"
+        "Source/300C_SIMU/EXTERNAL"
+    )
+    if(MSVC)
+        target_compile_options(test_logger_lazy_file PRIVATE /utf-8)
+    else()
+        target_compile_options(test_logger_lazy_file PRIVATE -Wall -Wextra)
+        target_link_libraries(test_logger_lazy_file PRIVATE pthread)
+    endif()
+    add_test(NAME test_logger_lazy_file COMMAND test_logger_lazy_file)
+
 	add_executable(test_a_train_session
 		"tests/test_a_train_session.cpp"
 		"Source/300C_SIMU/BSW_CODE/session/a_train_session.cpp"
